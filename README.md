@@ -12,7 +12,7 @@ The primary goal is to provide a quantitative, multi-faceted assessment of tremo
 | :---: | :---: |
 | ![Main Dashboard](./screenshots/img1.png) | ![Movement Overview](./screenshots/img5.png) |
 | **Temporal Frequency Tab** | **Movement Dynamics Tab** |
-| ![Spectrogram](./screenshots/img2.png) | ![Movement Dynamics](./img3.png) |
+| ![Spectrogram](./screenshots/img2.png) | ![Movement Dynamics](./screenshots/img3.png) |
 | **Frequency Based Tab** | **Clinical Features Tab** |
 | ![FFT](./screenshots/img6.png) | ![Clinical Features](./screenshots/img7.png) |
 
