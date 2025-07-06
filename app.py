@@ -715,8 +715,8 @@ with st.sidebar:
                 if total_duration and isinstance(total_duration, (int, float)) and total_duration > 2.0:
                     col1, col2 = st.columns(2)
 
-                    prev_disabled = not isinstance(start_time, (int, float)) or start_time <= 0
-                    next_disabled = not isinstance(end_time, (int, float)) or end_time >= total_duration
+                    prev_disabled = bool(start_time <= 0)
+                    next_disabled = bool(end_time >= total_duration)
 
                     if col1.button("Previous Window", use_container_width=True, disabled=prev_disabled):
                         st.session_state.current_window_start = max(0.0, st.session_state.current_window_start - 2.0)
