@@ -13,7 +13,7 @@ from scipy.signal import spectrogram
 from scipy.stats import entropy
 from requests.exceptions import RequestException
 
-# --- Page Configuration and Custom CSS ---
+# --- Page Configuration and Custom CSS for Dashboard ---
 st.set_page_config(
     page_title="Advanced Parkinson's Movement Analyzer",
     page_icon="🧠",
@@ -22,6 +22,7 @@ st.set_page_config(
 
 st.markdown("""
 <style>
+/* Dashboard Styles (Dark Theme) */
 .metric-box {
     background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05);
     border-radius: 20px; padding: 20px 16px; text-align: center; margin-bottom: 16px;
@@ -36,7 +37,7 @@ st.markdown("""
 .clinical-metric .label { font-size: 14px; color: #aaa; margin-bottom: 4px; }
 .clinical-metric .value { font-size: 20px; font-weight: 600; color: #fff; }
 [data-baseweb="tab-list"] { background-color: #0e1117; padding: 6px 10px; border-radius: 10px; border: 1px solid #333; }
-[data-baseweb="tab"] { background-color: #1a1d23; color: #aaa; border-radius: 8px; padding: 10px 16px; margin-right: 6px; font-weight: 500; transition: all 0.2s ease-in-out; }
+[data-basweeb="tab"] { background-color: #1a1d23; color: #aaa; border-radius: 8px; padding: 10px 16px; margin-right: 6px; font-weight: 500; transition: all 0.2s ease-in-out; }
 [data-baseweb="tab"]:hover { background-color: #2b2f36; color: #ddd; }
 [data-baseweb="tab"][aria-selected="true"] { background-color: #4f4f4f; color: white; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
 </style>
@@ -64,8 +65,8 @@ def init_session_state():
         'total_duration': 0.0,
         'current_window_analysis': None,
         'is_recording': False, 'recorded_data_buffer': [], 'last_recorded_id': -1,
-        'viewing_report': False,  # Controls if the report view is active
-        'report_data': None  # Stores data for the report view
+        'viewing_report': False,
+        'report_data': None
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -75,7 +76,7 @@ def init_session_state():
 init_session_state()
 
 
-# --- DATA FETCHING & SAVING FUNCTIONS (with enhanced error handling) ---
+# --- DATA FETCHING & SAVING FUNCTIONS (UNCHANGED) ---
 def get_live_data_from_firebase(URL, KEY):
     diagnostics = {'latency': 0, 'data_rate': 0}
     try:
@@ -159,7 +160,7 @@ def delete_recording_from_firebase(recording_id, URL, KEY):
         return False
 
 
-# --- ADVANCED ANALYSIS FUNCTION (with enhanced error handling) ---
+# --- ADVANCED ANALYSIS FUNCTION (UNCHANGED) ---
 def perform_advanced_analysis(data):
     if not data or not isinstance(data, list) or len(data) < 20: return None
     try:
@@ -232,7 +233,7 @@ def perform_advanced_analysis(data):
         return None
 
 
-# --- HELPER & UI FUNCTIONS ---
+# --- HELPER & UI FUNCTIONS (UNCHANGED) ---
 def classify_stage_by_index(index):
     if index < st.session_state.stage1_idx:
         return "Stage 0/1 Mild"
@@ -244,12 +245,12 @@ def classify_stage_by_index(index):
         return "Stage 4 Critical"
 
 
-def create_metric_box(title, value, help_text=""):
-    return f"""<div class="metric-box" title="{help_text}"><p>{value}</p><h4>{title}</h4></div>"""
+def create_metric_box(title, value,
+                      help_text=""): return f"""<div class="metric-box" title="{help_text}"><p>{value}</p><h4>{title}</h4></div>"""
 
 
-def create_clinical_metric(label, value, help_text=""):
-    return f"""<div class="clinical-metric" title="{help_text}"><div class="label">{label}</div><div class="value">{value}</div></div>"""
+def create_clinical_metric(label, value,
+                           help_text=""): return f"""<div class="clinical-metric" title="{help_text}"><div class="label">{label}</div><div class="value">{value}</div></div>"""
 
 
 def format_stage_with_color(stage_string):
@@ -259,21 +260,22 @@ def format_stage_with_color(stage_string):
     return f"<span style='color: #333;'>{stage_string}</span>"
 
 
-# --- MAIN DASHBOARD DISPLAY ---
+# --- MAIN DASHBOARD DISPLAY (UNCHANGED) ---
 def display_dashboard(df, metrics, fft_df, spec_data, corr_matrix, display_info, current_window=None):
     st.title("Advanced Parkinson's Movement Analyzer")
-
     col1, col2 = st.columns([1, 1.5])
     with col1:
         st.markdown("##### Composite Tremor Index")
-        fig = go.Figure(go.Indicator(
-            mode="gauge+number", value=metrics['composite_index'], number={'valueformat': '.2f'},
-            domain={'x': [0, 1], 'y': [0, 1]}, title={'text': "Severity", 'font': {'size': 16}},
-            gauge={'axis': {'range': [0, 1]}, 'bar': {'color': "dimgray"},
-                   'steps': [{'range': [0, st.session_state.stage1_idx], 'color': 'lightgreen'},
-                             {'range': [st.session_state.stage1_idx, st.session_state.stage2_idx], 'color': 'yellow'},
-                             {'range': [st.session_state.stage2_idx, st.session_state.stage3_idx], 'color': 'orange'},
-                             {'range': [st.session_state.stage3_idx, 1], 'color': 'red'}]}))
+        fig = go.Figure(
+            go.Indicator(mode="gauge+number", value=metrics['composite_index'], number={'valueformat': '.2f'},
+                         domain={'x': [0, 1], 'y': [0, 1]}, title={'text': "Severity", 'font': {'size': 16}},
+                         gauge={'axis': {'range': [0, 1]}, 'bar': {'color': "dimgray"},
+                                'steps': [{'range': [0, st.session_state.stage1_idx], 'color': 'lightgreen'},
+                                          {'range': [st.session_state.stage1_idx, st.session_state.stage2_idx],
+                                           'color': 'yellow'},
+                                          {'range': [st.session_state.stage2_idx, st.session_state.stage3_idx],
+                                           'color': 'orange'},
+                                          {'range': [st.session_state.stage3_idx, 1], 'color': 'red'}]}))
         fig.update_layout(height=200, margin=dict(t=40, b=10, l=10, r=10), font={'color': "white"})
         st.plotly_chart(fig, use_container_width=True)
     with col2:
@@ -294,82 +296,79 @@ def display_dashboard(df, metrics, fft_df, spec_data, corr_matrix, display_info,
         g6.markdown(create_metric_box("RMS of Jerk", f"{metrics['rms_jerk'] / 1000:.1f}k", "Movement smoothness."),
                     unsafe_allow_html=True)
     st.divider()
-
     s1, s2, s3, s4 = st.columns(4)
-    s1.metric("Status", display_info.get('status', 'N/A'))
-    s2.metric(display_info.get('id_label', 'ID'), str(display_info.get('id_value', 'N/A')))
-    s3.metric("Sample Rate", f"{metrics.get('sampling_freq', 0):.1f} Hz")
+    s1.metric("Status", display_info.get('status', 'N/A'));
+    s2.metric(display_info.get('id_label', 'ID'), str(display_info.get('id_value', 'N/A')));
+    s3.metric("Sample Rate", f"{metrics.get('sampling_freq', 0):.1f} Hz");
     s4.metric(display_info.get('time_label', 'Time'), display_info.get('timestamp', 'N/A'))
     st.write("---")
-
     tabs = st.tabs(
         ["Movement Overview", "Temporal Frequency", "Movement Dynamics", "Frequency Based", "Clinical Features",
          "Component Details", "Raw Data"])
-
     with tabs[0]:
-        st.subheader(f"Hand Movments vs Stabalizer: {current_window or 'Live Data'}")
+        st.subheader(f"Hand Movments vs Stabalizer: {current_window or 'Live Data'}");
         st.info(
             "This chart compares the RAW hand tremor with the movement of the Stabilized spoon . Effective stabilization should show a significantly smaller amplitude for the cyan line (Spoon).")
-        fig = go.Figure()
+        fig = go.Figure();
         fig.add_trace(go.Scatter(x=df['time_s'], y=df['total_mag'], mode='lines', name='Raw Hand (Sensor 1)',
-                                 line=dict(color='orange')))
+                                 line=dict(color='orange')));
         fig.add_trace(
             go.Scatter(x=df['time_s'], y=df['total_mag_stable'], mode='lines', name='Stabilized Spoon (Sensor 2)',
                        line=dict(color='cyan')))
         fig.update_layout(xaxis_title="Time (s)", yaxis_title="Acceleration Magnitude (m/s^2)", template="plotly_dark",
-                          legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+                          legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1));
         st.plotly_chart(fig, use_container_width=True)
     with tabs[1]:
-        st.subheader("Spectrogram: Tremor Frequency over Time")
+        st.subheader("Spectrogram: Tremor Frequency over Time");
         st.info(
             "The spectrogram shows the intensity of different tremor frequencies as they change over time. Bright horizontal bands in the 3–7 Hz range indicate a persistent Parkinsonian tremor.")
-        f_spec, t_spec, Sxx = spec_data
-        power_dB = 10 * np.log10(Sxx + 1e-9)
+        f_spec, t_spec, Sxx = spec_data;
+        power_dB = 10 * np.log10(Sxx + 1e-9);
         fig = px.imshow(power_dB, x=t_spec, y=f_spec, aspect='auto',
                         labels=dict(x="Time (s)", y="Frequency (Hz)", color="Power (dB)"),
                         color_continuous_scale='plasma', origin='lower')
         fig.update_yaxes(range=[0, 20]);
         st.plotly_chart(fig, use_container_width=True)
     with tabs[2]:
-        st.subheader("Advanced Movement Dynamics")
+        st.subheader("Advanced Movement Dynamics");
         col1, col2 = st.columns(2, gap="large")
         with col1:
-            st.markdown("**Poincaré Plot: Tremor Variability**")
+            st.markdown("**Poincaré Plot: Tremor Variability**");
             st.info(
                 "Plots each acceleration value against the next one. A tight, elongated ellipse indicates a regular tremor. A dispersed, circular cloud suggests random movement.")
-            poincare_df = pd.DataFrame({'a_t': df['total_mag'][:-1], 'a_t+1': df['total_mag'][1:]})
+            poincare_df = pd.DataFrame({'a_t': df['total_mag'][:-1], 'a_t+1': df['total_mag'][1:]});
             fig = px.scatter(poincare_df, x='a_t', y='a_t+1', opacity=0.6,
                              labels={'a_t': 'Accel. at Time t', 'a_t+1': 'Accel. at Time t+1'}, template="plotly_dark")
             st.plotly_chart(fig, use_container_width=True)
         with col2:
-            st.markdown("**3D Movement Trajectory**")
+            st.markdown("**3D Movement Trajectory**");
             st.info(
                 "Visualizes the tremor's path in 3D space. Helps identify if the tremor is directional (linear) or rotational (circular/elliptical).")
             fig = px.scatter_3d(df, x='ax1', y='ay1', z='az1', color='time_s',
                                 labels={'ax1': 'X-axis', 'ay1': 'Y-axis', 'az1': 'Z-axis'}, template="plotly_dark",
-                                opacity=0.7)
+                                opacity=0.7);
             st.plotly_chart(fig, use_container_width=True)
     with tabs[3]:
-        st.subheader("Frequency Spectrum Analysis (FFT)")
+        st.subheader("Frequency Spectrum Analysis (FFT)");
         st.info(
             "This breaks down the entire movement signal into its constituent frequencies. A large, sharp peak in the 3-7 Hz range (red band) is a classic signature of Parkinsonian tremor.")
-        fig = px.bar(fft_df, x='Frequency (Hz)', y='Power', template="seaborn", log_y=True)
+        fig = px.bar(fft_df, x='Frequency (Hz)', y='Power', template="seaborn", log_y=True);
         fig.add_vrect(x0=3, x1=7, fillcolor="red", opacity=0.25, line_width=0,
                       annotation_text="Parkinson's Band (3-7 Hz)")
         fig.update_xaxes(range=[0, 25]);
         st.plotly_chart(fig, use_container_width=True)
     with tabs[4]:
-        st.subheader("Clinical Feature Analysis")
+        st.subheader("Clinical Feature Analysis");
         st.info(
             "This section provides a deeper look into specific biomarkers and mathematical features used in clinical research to characterize tremors.")
         col1, col2 = st.columns([2, 1])
         with col1:
-            st.markdown("**Tremor Feature Fingerprint**")
+            st.markdown("**Tremor Feature Fingerprint**");
             st.markdown(
                 "This radar chart provides a multi-dimensional profile of the tremor. A larger shape indicates a more pronounced tremor across various domains.",
                 unsafe_allow_html=True)
             categories = ['Intensity (RMS)', 'Roughness (Jerk)', 'PD-Band Power', 'Irregularity (Entropy)',
-                          'Spikiness (Crest)']
+                          'Spikiness (Crest)'];
             norm_rms = min(metrics['rms_tremor'] / 5000, 1.0);
             norm_jerk = min(metrics['rms_jerk'] / 150000, 1.0);
             norm_band_power = metrics['band_power_3_7_ratio'] / 100.0;
@@ -383,7 +382,7 @@ def display_dashboard(df, metrics, fft_df, spec_data, corr_matrix, display_info,
                               template="plotly_dark", margin=dict(t=40, b=20, l=40, r=40));
             st.plotly_chart(fig, use_container_width=True)
         with col2:
-            st.markdown("**Core Biomarkers**")
+            st.markdown("**Core Biomarkers**");
             st.markdown(create_clinical_metric("Peak Frequency", f"{metrics['peak_freq']:.2f} Hz",
                                                "The single most dominant frequency in the tremor."),
                         unsafe_allow_html=True);
@@ -397,25 +396,26 @@ def display_dashboard(df, metrics, fft_df, spec_data, corr_matrix, display_info,
                                                "Indicates signal oscillation frequency."), unsafe_allow_html=True);
             st.markdown(create_clinical_metric("Signal Magnitude Area", f"{metrics['sma']:.1f}",
                                                "Cumulative measure of movement intensity."), unsafe_allow_html=True)
-        st.divider()
+        st.divider();
         col3, col4 = st.columns(2, gap="large")
         with col3:
-            st.markdown("**Cross-Axis Correlation**")
+            st.markdown("**Cross-Axis Correlation**");
             st.info(
                 "Shows the correlation between X, Y, and Z axes. High correlation (bright squares) indicates planar tremor; low correlation (dark squares) suggests complex, rotational movement.")
             fig = px.imshow(corr_matrix, text_auto=".2f", aspect="auto", color_continuous_scale='RdBu_r',
-                            range_color=[-1, 1], labels=dict(color="Correlation"))
+                            range_color=[-1, 1], labels=dict(color="Correlation"));
             st.plotly_chart(fig, use_container_width=True)
         with col4:
-            st.markdown("**Per-Axis Movement Variability (Std. Dev.)**")
+            st.markdown("**Per-Axis Movement Variability (Std. Dev.)**");
             st.info(
                 "This bar chart shows the standard deviation for each axis, revealing if the tremor is more pronounced in a specific direction.")
-            std_df = pd.DataFrame(list(metrics['std_dev_axes'].items()), columns=['Axis', 'Standard Deviation'])
-            std_df['Axis'] = std_df['Axis'].map({'ax1': 'X-axis', 'ay1': 'Y-axis', 'az1': 'Z-axis'})
-            fig = px.bar(std_df, x='Axis', y='Standard Deviation', color='Axis', template="plotly_dark", text_auto=True)
+            std_df = pd.DataFrame(list(metrics['std_dev_axes'].items()), columns=['Axis', 'Standard Deviation']);
+            std_df['Axis'] = std_df['Axis'].map({'ax1': 'X-axis', 'ay1': 'Y-axis', 'az1': 'Z-axis'});
+            fig = px.bar(std_df, x='Axis', y='Standard Deviation', color='Axis', template="plotly_dark",
+                         text_auto=True);
             st.plotly_chart(fig, use_container_width=True)
     with tabs[5]:
-        st.subheader("Per-Axis Time Series Analysis")
+        st.subheader("Per-Axis Time Series Analysis");
         st.info(
             "These charts break down the total movement magnitude into its individual X, Y, and Z components for both the raw hand and the stabilized spoon.")
         c1, c2 = st.columns(2, gap="large")
@@ -431,96 +431,198 @@ def display_dashboard(df, metrics, fft_df, spec_data, corr_matrix, display_info,
         st.dataframe(df[display_cols].style.format("{:.3f}"), use_container_width=True)
 
 
-# --- NEW FUNCTION TO DISPLAY THE REPORT IN-APP ---
+# --- NEW PROFESSIONAL REPORT DISPLAY FUNCTION ---
 def display_report_page():
-    """Renders a report view directly in the Streamlit app, avoiding Kaleido."""
+    """Renders a professional, print-friendly report page with a white background."""
+
     report_info = st.session_state.report_data
     if not report_info:
         st.error("No report data found. Returning to dashboard.")
         st.session_state.viewing_report = False
         st.rerun()
 
-    window_analysis = report_info['analysis']
+    df, metrics, fft_df, _, _ = report_info['analysis']
     patient_details = report_info['details']
     window_str = report_info['window_str']
 
-    df, metrics, fft_df, _, _ = window_analysis
+    # --- Custom CSS for the Report Page (White Theme) ---
+    st.markdown("""
+    <style>
+    /* Hide the default Streamlit header, footer, and toolbar */
+    .report-container #stHeader, .report-container .viewerBadge_link__1Srq5, .report-container .styles_toolbar__3_r_5 {
+        display: none !important;
+    }
+    .report-container {
+        background-color: #FFFFFF;
+        color: #111111;
+        padding: 2rem;
+        font-family: 'Helvetica', 'Arial', sans-serif;
+    }
+    .report-container h1, .report-container h2, .report-container h3 {
+        color: #003366; /* Dark blue for headings */
+    }
+    .report-header {
+        border-bottom: 2px solid #003366;
+        padding-bottom: 1rem;
+        margin-bottom: 2rem;
+    }
+    .report-card {
+        border: 1px solid #DDDDDD;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    .report-controls {
+        text-align: right;
+    }
+    /* Style Streamlit's table for the report */
+    .report-container .stTable {
+        font-size: 14px;
+    }
+    .report-container .stTable > table > tbody > tr > td,
+    .report-container .stTable > table > thead > tr > th {
+        border: 1px solid #ccc;
+    }
+    .report-footer {
+        text-align: center;
+        margin-top: 3rem;
+        font-size: 0.8rem;
+        color: #888888;
+        border-top: 1px solid #DDDDDD;
+        padding-top: 1rem;
+    }
+    /* Styles for printing */
+    @media print {
+        /* Hide sidebar and report controls when printing */
+        .main > div[data-testid="stSidebar"], .report-controls {
+            display: none !important;
+        }
+        /* Ensure the main content uses the full page width */
+        section[data-testid="st-container"] {
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+        }
+        .report-container {
+            padding: 0;
+            box-shadow: none;
+            border: none;
+        }
+        .report-card {
+            box-shadow: none;
+            border: 1px solid #ccc;
+        }
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.title("Parkinson's Tremor Report")
-    with col2:
-        if st.button("⬅️ Back to Dashboard", use_container_width=True):
-            st.session_state.viewing_report = False
-            st.session_state.report_data = None
-            st.rerun()
+    # --- HTML for Print Button ---
+    print_button_html = """
+    <button onclick="window.print()" style="padding: 8px 16px; font-weight: 600; border-radius: 8px; border: 1px solid #003366; background-color: #FFFFFF; color: #003366; cursor: pointer; margin-left: 10px;">
+        🖨️ Print Report
+    </button>
+    """
 
-    st.markdown("---")
+    # --- Report Layout ---
+    with st.container():
+        st.markdown('<div class="report-container">', unsafe_allow_html=True)
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Patient ID", patient_details.get('patient_id', 'N/A'))
-    c2.metric("Recorded On", patient_details.get('timestamp', 'N/A').split(" ")[0])
-    c3.metric("Analysis Window", window_str)
-    c4.metric("Generated On", datetime.now().strftime('%Y-%m-%d'))
-    st.markdown("---")
+        # 1. Header
+        with st.container():
+            c1, c2 = st.columns([3, 1])
+            with c1:
+                st.markdown(
+                    '<div class="report-header"><h1>Parkinson\'s Tremor Analysis Report</h1><h3>Confidential Clinical Data</h3></div>',
+                    unsafe_allow_html=True)
+            with c2:
+                st.markdown('<div class="report-controls">', unsafe_allow_html=True)
+                if st.button("⬅️ Back to Dashboard", use_container_width=True):
+                    st.session_state.viewing_report = False
+                    st.session_state.report_data = None
+                    st.rerun()
+                st.markdown(print_button_html, unsafe_allow_html=True)
+                st.markdown('</div>', unsafe_allow_html=True)
 
-    st.subheader("1. Summary & Severity Index")
-    summary_col, gauge_col = st.columns([1, 1])
-    with summary_col:
-        summary_text = (
-            f"An analysis of the **{window_str}** window revealed a tremor classified as **{metrics['stage']}**. "
-            f"The tremor's root mean square (RMS) power was **{metrics['rms_tremor']:.0f} units**, with a dominant peak frequency at **{metrics['peak_freq']:.2f} Hz**. "
-            f"The hardware stabilizer demonstrated an efficiency of **{metrics['effectiveness']:.1f}%** in reducing this tremor."
-        )
-        st.success(f"**Stage:** {metrics['stage']}")
-        st.info(f"**Key Finding:** {summary_text}")
+        # 2. Patient Information
+        with st.container():
+            st.markdown("<h3>Patient & Session Information</h3>", unsafe_allow_html=True)
+            with st.container(border=True):
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Patient ID", patient_details.get('patient_id', 'N/A'))
+                c2.metric("Recording Date", patient_details.get('timestamp', 'N/A').split(" ")[0])
+                c3.metric("Analysis Window", window_str)
+                c4.metric("Report Generated", datetime.now().strftime('%Y-%m-%d'))
 
-    with gauge_col:
-        fig_gauge = go.Figure(go.Indicator(
-            mode="gauge+number", value=metrics['composite_index'], number={'valueformat': '.2f'},
-            domain={'x': [0, 1], 'y': [0, 1]}, title={'text': f"Composite Severity Index"},
-            gauge={
-                'axis': {'range': [0, 1]}, 'bar': {'color': "gray"},
-                'steps': [
-                    {'range': [0, 0.3], 'color': '#a5d6a7'}, {'range': [0.3, 0.5], 'color': '#fff59d'},
-                    {'range': [0.5, 0.7], 'color': '#ffcc80'}, {'range': [0.7, 1.0], 'color': '#ef9a9a'}
-                ]}))
-        fig_gauge.update_layout(height=280, margin=dict(t=50, b=20))
-        st.plotly_chart(fig_gauge, use_container_width=True)
+        st.markdown("<br>", unsafe_allow_html=True)
 
-    st.markdown("---")
+        # 3. Key Findings & Gauge
+        st.markdown("<h3>Key Findings</h3>", unsafe_allow_html=True)
+        with st.container(border=True):
+            col1, col2 = st.columns([1.5, 1])
+            with col1:
+                st.markdown(f"""
+                - **Classification:** The tremor is classified as **{metrics['stage']}**.
+                - **Severity Index:** A composite score of **{metrics['composite_index']:.2f}** (out of 1.0) was calculated.
+                - **Dominant Frequency:** The tremor shows a peak frequency at **{metrics['peak_freq']:.2f} Hz**, which is within the typical 3-7 Hz band for Parkinson's disease.
+                - **Stabilizer Performance:** The hardware stabilizer demonstrated an efficiency of **{metrics['effectiveness']:.1f}%** in reducing tremor amplitude.
+                """)
+            with col2:
+                fig_gauge = go.Figure(go.Indicator(
+                    mode="gauge+number", value=metrics['composite_index'], number={'valueformat': '.2f'},
+                    domain={'x': [0, 1], 'y': [0, 1]}, title={'text': f"Severity Index"},
+                    gauge={'axis': {'range': [0, 1]}, 'bar': {'color': "darkgray"}, 'steps': [
+                        {'range': [0, 0.3], 'color': '#A5D6A7'}, {'range': [0.3, 0.5], 'color': '#FFF59D'},
+                        {'range': [0.5, 0.7], 'color': '#FFCC80'}, {'range': [0.7, 1.0], 'color': '#EF9A9A'}
+                    ]}))
+                fig_gauge.update_layout(height=250, margin=dict(t=80, b=20), template='plotly_white')
+                st.plotly_chart(fig_gauge, use_container_width=True)
 
-    st.subheader("2. Graphical Analysis")
-    chart_col1, chart_col2 = st.columns(2)
-    with chart_col1:
-        st.markdown("**Time-Series Movement**")
-        fig_ts = go.Figure()
-        fig_ts.add_trace(go.Scatter(x=df['time_s'], y=df['total_mag'], mode='lines', name='Raw Hand Motion'))
-        fig_ts.add_trace(go.Scatter(x=df['time_s'], y=df['total_mag_stable'], mode='lines', name='Stabilized Output'))
-        fig_ts.update_layout(xaxis_title="Time (s)", yaxis_title="Acceleration Magnitude",
-                             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-        st.plotly_chart(fig_ts, use_container_width=True)
+        st.markdown("<br>", unsafe_allow_html=True)
 
-    with chart_col2:
-        st.markdown("**Frequency Spectrum (FFT)**")
-        fig_fft = px.bar(fft_df, x='Frequency (Hz)', y='Power', log_y=True)
-        fig_fft.add_vrect(x0=3, x1=7, fillcolor="red", opacity=0.2, line_width=0, annotation_text="PD Band")
-        fig_fft.update_xaxes(range=[0, 25])
-        st.plotly_chart(fig_fft, use_container_width=True)
+        # 4. Graphical Analysis
+        st.markdown("<h3>Graphical Analysis</h3>", unsafe_allow_html=True)
+        with st.container(border=True):
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown("<h5>Time-Series Movement</h5>", unsafe_allow_html=True)
+                fig_ts = go.Figure()
+                fig_ts.add_trace(go.Scatter(x=df['time_s'], y=df['total_mag'], mode='lines', name='Raw Hand'))
+                fig_ts.add_trace(go.Scatter(x=df['time_s'], y=df['total_mag_stable'], mode='lines', name='Stabilized'))
+                fig_ts.update_layout(xaxis_title="Time (s)", yaxis_title="Acceleration Magnitude",
+                                     template='plotly_white',
+                                     legend=dict(orientation="h", yanchor="top", y=1.15, xanchor="left", x=0))
+                st.plotly_chart(fig_ts, use_container_width=True)
+            with c2:
+                st.markdown("<h5>Frequency Spectrum (FFT)</h5>", unsafe_allow_html=True)
+                fig_fft = px.bar(fft_df, x='Frequency (Hz)', y='Power', log_y=True)
+                fig_fft.add_vrect(x0=3, x1=7, fillcolor="rgba(255,0,0,0.15)", line_width=0, annotation_text="PD Band")
+                fig_fft.update_xaxes(range=[0, 25])
+                fig_fft.update_layout(template='plotly_white')
+                st.plotly_chart(fig_fft, use_container_width=True)
 
-    st.markdown("---")
+        # 5. Detailed Metrics Table
+        st.markdown("<h3>Detailed Clinical Metrics</h3>", unsafe_allow_html=True)
+        with st.container(border=True):
+            metrics_df = pd.DataFrame({
+                "Metric": ["RMS Power", "Peak Frequency", "Power in 3–7 Hz", "RMS Jerk", "Stabilizer Effectiveness",
+                           "Spectral Entropy", "Crest Factor"],
+                "Value": [f"{metrics['rms_tremor']:.0f}", f"{metrics['peak_freq']:.2f} Hz",
+                          f"{metrics['band_power_3_7_ratio']:.1f}%", f"{metrics['rms_jerk'] / 1000:.1f}k",
+                          f"{metrics['effectiveness']:.1f}%", f"{metrics['spectral_entropy']:.2f}",
+                          f"{metrics['crest_factor']:.2f}"],
+                "Description": ["Overall intensity of the tremor.", "The most dominant frequency component.",
+                                "Percentage of tremor power in the typical PD range.",
+                                "A measure of the movement's smoothness (lower is smoother).",
+                                "Reduction in tremor amplitude by the device.",
+                                "Measure of the tremor's randomness or unpredictability.",
+                                "Ratio of peak to average power, indicating spikiness."]
+            })
+            st.table(metrics_df.set_index("Metric"))
 
-    st.subheader("3. Detailed Clinical Metrics")
-    metrics_df = pd.DataFrame({
-        "Metric": ["RMS Power", "Peak Frequency", "Power in 3–7 Hz", "RMS Jerk", "Stabilizer Effectiveness",
-                   "Spectral Entropy"],
-        "Value": [f"{metrics['rms_tremor']:.0f}", f"{metrics['peak_freq']:.2f} Hz",
-                  f"{metrics['band_power_3_7_ratio']:.1f}%", f"{metrics['rms_jerk'] / 1000:.1f}k",
-                  f"{metrics['effectiveness']:.1f}%", f"{metrics['spectral_entropy']:.2f}"]
-    })
-    st.table(metrics_df)
-
-    st.info("You can use your browser's print functionality (Ctrl+P or Cmd+P) to save this report as a PDF.")
+        st.markdown(
+            '<p class="report-footer">This report was automatically generated. For diagnostic purposes, please consult a qualified medical professional.</p>',
+            unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
 
 # --- SIDEBAR & MAIN LOGIC ---
@@ -528,18 +630,18 @@ placeholder = st.empty()
 analysis_result_for_display = None
 
 with st.sidebar:
-    st.title("Dashboard Controls")
-    # Hide sidebar controls when viewing report to prevent interference
+    # Hide sidebar controls when viewing the report for a cleaner print view
     if not st.session_state.viewing_report:
+        st.title("Dashboard Controls")
         st.session_state.mode = st.radio("Select Mode", ('Live', 'Playback'), horizontal=True,
                                          help="Choose 'Live' to see real-time data or 'Playback' to review saved recordings.")
         st.divider()
+
         if st.session_state.mode == 'Live':
             st.header("Live Dashboard Settings")
             st.session_state.is_running = st.toggle("Enable Auto-Refresh", value=True,
                                                     disabled=st.session_state.is_recording)
             refresh_interval = st.slider("Update Interval (seconds)", 2, 15, 2, key="live_refresh_interval")
-
             with st.expander("Continuous Recording", expanded=True):
                 st.session_state.patient_id_input = st.text_input("Patient ID", value=st.session_state.patient_id_input,
                                                                   disabled=st.session_state.is_recording)
@@ -558,13 +660,12 @@ with st.sidebar:
                                                    st.session_state.recorded_data_buffer, FIREBASE_URL, DB_SECRET)
                         st.session_state.recorded_data_buffer = [];
                         st.rerun()
-
             st.divider()
             st.header("Connection Health")
             total_req = st.session_state.connection_successes + st.session_state.connection_failures
             success_rate = (st.session_state.connection_successes / total_req * 100) if total_req > 0 else 100
-            st.metric("Last Fetch", st.session_state.last_conn_status)
-            st.metric("Latency", f"{st.session_state.last_latency:.2f} s")
+            st.metric("Last Fetch", st.session_state.last_conn_status);
+            st.metric("Latency", f"{st.session_state.last_latency:.2f} s");
             st.metric("Data Rate", f"{st.session_state.last_data_rate:.1f} KB/s")
             st.progress(success_rate / 100, text=f"Success Rate : {success_rate:.1f}%")
 
@@ -583,10 +684,8 @@ with st.sidebar:
                     selection = st.selectbox("Choose a recording to analyze", options=options.keys(),
                                              format_func=lambda rec_id: options[rec_id], index=None,
                                              placeholder="Select a recording...")
-                    if selection:
-                        st.session_state.selected_recording_id = selection;
-                        st.rerun()
-            else:  # A recording is selected
+                    if selection: st.session_state.selected_recording_id = selection; st.rerun()
+            else:
                 if st.session_state.full_playback_df is None:
                     with st.spinner("Loading full recording data..."):
                         recording_data = get_specific_recording(st.session_state.selected_recording_id, FIREBASE_URL,
@@ -594,66 +693,53 @@ with st.sidebar:
                         if recording_data and 'data' in recording_data:
                             df, metrics, _, _, _ = perform_advanced_analysis(recording_data['data'])
                             if df is not None:
-                                st.session_state.full_playback_df = df
+                                st.session_state.full_playback_df = df;
                                 st.session_state.total_duration = metrics.get('duration', 0);
                                 st.session_state.current_window_start = 0.0
                             else:
-                                st.error("Failed to process recording data.");
-                                st.session_state.selected_recording_id = None;
+                                st.error(
+                                    "Failed to process recording data."); st.session_state.selected_recording_id = None;
                         else:
-                            st.error("Failed to load recording data.");
-                            st.session_state.selected_recording_id = None;
+                            st.error("Failed to load recording data."); st.session_state.selected_recording_id = None;
                     st.rerun()
-
                 if st.session_state.full_playback_df is not None:
                     total_duration = st.session_state.total_duration;
                     start_time = st.session_state.current_window_start;
                     end_time = start_time + 2.0
                     window_df_raw = st.session_state.full_playback_df[
                         (st.session_state.full_playback_df['time_s'] >= start_time) & (
-                                st.session_state.full_playback_df['time_s'] < end_time)]
-                    window_data_as_list = window_df_raw.to_dict('records')
-                    st.session_state.current_window_analysis = perform_advanced_analysis(window_data_as_list)
+                                    st.session_state.full_playback_df['time_s'] < end_time)]
+                    st.session_state.current_window_analysis = perform_advanced_analysis(
+                        window_df_raw.to_dict('records'))
                     analysis_result_for_display = st.session_state.current_window_analysis
-
-                    st.subheader("Window Navigation")
+                    st.subheader("Window Navigation");
                     st.write(f"**Viewing:** `{start_time:.1f}s - {end_time:.1f}s` of `{total_duration:.1f}s` total.")
                     if total_duration and isinstance(total_duration, (int, float)) and total_duration > 2.0:
                         col1, col2 = st.columns(2)
-
-                        prev_disabled = bool(start_time <= 0)
-                        next_disabled = bool(end_time >= total_duration)
-
-                        if col1.button("Previous Window", use_container_width=True, disabled=prev_disabled):
-                            st.session_state.current_window_start = max(0.0,
-                                                                        st.session_state.current_window_start - 2.0)
-                            st.rerun()
-
-                        if col2.button("Next Window", use_container_width=True, disabled=next_disabled):
-                            st.session_state.current_window_start = min(total_duration - 2.0,
-                                                                        st.session_state.current_window_start + 2.0)
-                            st.rerun()
-
+                        if col1.button("Previous Window", use_container_width=True,
+                                       disabled=bool(start_time <= 0)): st.session_state.current_window_start = max(0.0,
+                                                                                                                    st.session_state.current_window_start - 2.0); st.rerun()
+                        if col2.button("Next Window", use_container_width=True, disabled=bool(
+                            end_time >= total_duration)): st.session_state.current_window_start = min(
+                            total_duration - 2.0, st.session_state.current_window_start + 2.0); st.rerun()
                     st.divider()
                     st.subheader("Generate Report")
                     if st.session_state.current_window_analysis:
                         window_str = f"{start_time:.1f}s - {end_time:.1f}s"
                         if st.button(f"View Report for {window_str}", use_container_width=True, type="primary"):
-                            st.session_state.report_data = {
-                                "analysis": st.session_state.current_window_analysis,
-                                "details": st.session_state.recordings_list[st.session_state.selected_recording_id],
-                                "window_str": window_str
-                            }
-                            st.session_state.viewing_report = True
+                            st.session_state.report_data = {"analysis": st.session_state.current_window_analysis,
+                                                            "details": st.session_state.recordings_list[
+                                                                st.session_state.selected_recording_id],
+                                                            "window_str": window_str}
+                            st.session_state.viewing_report = True;
                             st.rerun()
                     else:
                         st.info("No data in this window to generate a report.")
-
                     st.divider()
                     st.subheader("Session Control")
                     if st.button("Stop Playback (Back to List)", use_container_width=True):
-                        keys_to_reset = ['selected_recording_id', 'full_playback_df', 'current_window_analysis']
-                        for key in keys_to_reset: st.session_state[key] = None
+                        keys_to_reset = ['selected_recording_id', 'full_playback_df', 'current_window_analysis'];
+                        [st.session_state.pop(key, None) for key in keys_to_reset];
                         st.rerun()
                     with st.expander("⚠️ Delete this recording"):
                         st.warning("This action is permanent and cannot be undone.")
@@ -661,10 +747,10 @@ with st.sidebar:
                             if delete_recording_from_firebase(st.session_state.selected_recording_id, FIREBASE_URL,
                                                               DB_SECRET):
                                 get_recordings_list.clear();
-                                keys_to_reset = ['selected_recording_id', 'full_playback_df', 'current_window_analysis']
-                                for key in keys_to_reset: st.session_state[key] = None
+                                keys_to_reset = ['selected_recording_id', 'full_playback_df',
+                                                 'current_window_analysis'];
+                                [st.session_state.pop(key, None) for key in keys_to_reset];
                                 st.rerun()
-
         st.divider()
         with st.expander("Analysis & Staging Tuning"):
             st.session_state.w_rms = st.slider("RMS Weight", 0.0, 1.0, 0.4, 0.05);
@@ -673,10 +759,8 @@ with st.sidebar:
             st.session_state.stage1_idx = st.slider("Stage 1/2 Boundary", 0.0, 1.0, 0.3);
             st.session_state.stage2_idx = st.slider("Stage 2/3 Boundary", 0.0, 1.0, 0.5);
             st.session_state.stage3_idx = st.slider("Stage 3/4 Boundary", 0.0, 1.0, 0.7)
-    else:
-        st.info("Currently viewing a report. Use the 'Back to Dashboard' button to return.")
 
-# --- MAIN APPLICATION LOGIC ---
+# --- MAIN LOGIC WRAPPER ---
 if st.session_state.get('viewing_report', False):
     placeholder.empty()
     display_report_page()
@@ -686,72 +770,53 @@ else:
         dataset_id, raw_data, diagnostics = get_live_data_from_firebase(URL=FIREBASE_URL, KEY=DB_SECRET)
         st.session_state.last_latency, st.session_state.last_data_rate = diagnostics['latency'], diagnostics[
             'data_rate']
-
         if dataset_id is not None:
             if dataset_id != st.session_state.last_seen_id:
-                st.session_state.device_status = "🟢 Online"
-                st.session_state.last_seen_id = dataset_id
+                st.session_state.device_status = "🟢 Online";
+                st.session_state.last_seen_id = dataset_id;
                 st.session_state.last_id_time = time.time()
             elif time.time() - st.session_state.last_id_time > (st.session_state.get('live_refresh_interval', 5) * 4):
                 st.session_state.device_status = "🔴 Offline"
             else:
                 st.session_state.device_status = "🟡 Moderate"
-
             if st.session_state.is_recording and raw_data:
-                if dataset_id > st.session_state.get('last_recorded_id', -1):
-                    st.session_state.recorded_data_buffer.extend(raw_data)
-                    st.session_state.last_recorded_id = dataset_id
-
+                if dataset_id > st.session_state.get('last_recorded_id',
+                                                     -1): st.session_state.recorded_data_buffer.extend(
+                    raw_data); st.session_state.last_recorded_id = dataset_id
             processed_result = perform_advanced_analysis(raw_data)
             if processed_result:
                 df, metrics, fft_df, spec_data, corr_matrix = processed_result
-                live_info = {
-                    'status': st.session_state.device_status,
-                    'id_label': 'Dataset ID',
-                    'id_value': dataset_id,
-                    'time_label': 'Last Update',
-                    'timestamp': datetime.now().strftime('%H:%M:%S')
-                }
+                live_info = {'status': st.session_state.device_status, 'id_label': 'Dataset ID', 'id_value': dataset_id,
+                             'time_label': 'Last Update', 'timestamp': datetime.now().strftime('%H:%M:%S')}
                 placeholder.empty();
                 display_dashboard(df, metrics, fft_df, spec_data, corr_matrix, display_info=live_info)
             else:
                 placeholder.warning("Received data is invalid or too small. Waiting for new data...")
         else:
-            st.session_state.device_status = "Disconnected"
-            placeholder.error("Could not retrieve live data. Check connection and secrets. Retrying...")
-
-    else:  # Playback mode
+            st.session_state.device_status = "Disconnected"; placeholder.error(
+                "Could not retrieve live data. Check connection and secrets. Retrying...")
+    else:
         if analysis_result_for_display:
             df, metrics, fft_df, spec_data, corr_matrix = analysis_result_for_display
-            start_time = st.session_state.current_window_start
+            start_time = st.session_state.current_window_start;
             window_str = f"{start_time:.1f}s - {start_time + 2.0:.1f}s"
-            playback_info = {
-                'status': 'Playback',
-                'id_label': 'Recording ID',
-                'id_value': st.session_state.selected_recording_id,
-                'time_label': 'Recorded On',
-                'timestamp': st.session_state.recordings_list[st.session_state.selected_recording_id]['timestamp']
-            }
-            placeholder.empty()
+            playback_info = {'status': 'Playback', 'id_label': 'Recording ID',
+                             'id_value': st.session_state.selected_recording_id, 'time_label': 'Recorded On',
+                             'timestamp': st.session_state.recordings_list[st.session_state.selected_recording_id][
+                                 'timestamp']}
+            placeholder.empty();
             display_dashboard(df, metrics, fft_df, spec_data, corr_matrix, display_info=playback_info,
                               current_window=window_str)
         elif st.session_state.selected_recording_id is not None and st.session_state.full_playback_df is not None:
-            placeholder.warning(f"No valid data in the selected window. Please try another window.");
+            placeholder.warning(f"No valid data in the selected window. Please try another window.")
         elif st.session_state.selected_recording_id is None:
             placeholder.info("Select a recording from the sidebar to begin playback and analysis.")
-        else:
-            pass
 
-    # --- Footer ---
-    st.markdown("""
-        <div style='background-color: #0e1117; color: #4f4f4f; text-align: center; padding: 15px; font-size: 14px; margin-top: 50px; width: 100%; border-top: 1px solid #4f4f4f;'>
-            <b>Project:</b> Vibration Analyzed Smart Glove to Aid Parkinson's Patient Hand Tremor with Postural Stability<br>
-            <b>Team:</b> 22LE1-035 S.A.P.U.Hemachandra | 22LE2-082 I.H.C.Udayanga | <b>Group:</b> B 07-18<br>
-            <b>Supervisor:</b> Mr. Nuwan Attanayake
-        </div>
-    """, unsafe_allow_html=True)
-
+    # --- Footer for Dashboard ---
+    st.markdown(
+        """<div style='background-color: #0e1117; color: #4f4f4f; text-align: center; padding: 15px; font-size: 14px; margin-top: 50px; width: 100%; border-top: 1px solid #4f4f4f;'><b>Project:</b> Vibration Analyzed Smart Glove to Aid Parkinson's Patient Hand Tremor with Postural Stability<br><b>Team:</b> 22LE1-035 S.A.P.U.Hemachandra | 22LE2-082 I.H.C.Udayanga | <b>Group:</b> B 07-18<br><b>Supervisor:</b> Mr. Nuwan Attanayake</div>""",
+        unsafe_allow_html=True)
     # --- Auto-Refresh Logic ---
     if st.session_state.is_running and st.session_state.mode == 'Live':
-        time.sleep(st.session_state.get('live_refresh_interval', 5))
+        time.sleep(st.session_state.get('live_refresh_interval', 5));
         st.rerun()
