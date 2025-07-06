@@ -10,11 +10,11 @@ The primary goal is to provide a quantitative, multi-faceted assessment of tremo
 
 | Composite Index & Main Metrics | Movement Overview Tab |
 | :---: | :---: |
-| ![Main Dashboard](./screenshots/main_dashboard.png) | ![Movement Overview](./screenshots/tab1_overview.png) |
+| ![Main Dashboard](./screenshots/img1.png) | ![Movement Overview](./screenshots/img5.png) |
 | **Temporal Frequency Tab** | **Movement Dynamics Tab** |
-| ![Spectrogram](./screenshots/tab2_spectrogram.png) | ![Movement Dynamics](./screenshots/tab3_dynamics.png) |
+| ![Spectrogram](./screenshots/img2.png) | ![Movement Dynamics](./img3.png) |
 | **Frequency Based Tab** | **Clinical Features Tab** |
-| ![FFT](./screenshots/tab4_fft.png) | ![Clinical Features](./screenshots/tab5_clinical.png) |
+| ![FFT](./screenshots/img6.png) | ![Clinical Features](./screenshots/img7.png) |
 
 ## ✨ Features
 
