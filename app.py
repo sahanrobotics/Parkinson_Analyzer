@@ -259,6 +259,8 @@ def format_stage_with_color(stage_string):
     return f"<span style='color: #333;'>{stage_string}</span>"
 
 
+
+
 def generate_html_report(window_analysis, patient_details, window_str):
     """
     Generates a complete, visually rich, and data-dense report with a modern, professional design.
@@ -284,141 +286,66 @@ def generate_html_report(window_analysis, patient_details, window_str):
     def create_svg_movement_chart(df):
         data_points = df[['time_s', 'total_mag']]
         if data_points.empty: return "<p class='chart-nodata'>No movement data to display.</p>"
-
-        # Downsample for performance
         if len(data_points) > 500:
             step = len(data_points) // 500
             data_points = data_points.iloc[::step]
-
         w, h, pad_t, pad_b, pad_l, pad_r = 800, 250, 25, 40, 50, 20
         chart_w, chart_h = w - pad_l - pad_r, h - pad_t - pad_b
         max_time = data_points['time_s'].max() or 1
-
-        # --- ROBUST Y-AXIS SCALING ---
-        # Use 99th percentile to set the Y-axis max, ignoring extreme outliers.
-        # This makes the main tremor variations visible.
-        # Fallback to mean or 1 if data is unusual.
         y_axis_max = (data_points['total_mag'].quantile(0.99) or data_points['total_mag'].mean() * 2 or 1) * 1.1
-
-        # Check if any data was "clipped" by our new robust scale
         is_clipped = data_points['total_mag'].max() > y_axis_max
         clipping_indicator = f'<text x="{w - pad_r}" y="{pad_t - 8}" class="clipping-indicator" text-anchor="end">▲ Some data extends above chart</text>' if is_clipped else ''
-
         points_list = [
-            ((row['time_s'] / max_time) * chart_w + pad_l,
-             pad_t + chart_h - (row['total_mag'] / y_axis_max) * chart_h)
-            for _, row in data_points.iterrows()
-        ]
+            ((row['time_s'] / max_time) * chart_w + pad_l, pad_t + chart_h - (row['total_mag'] / y_axis_max) * chart_h)
+            for _, row in data_points.iterrows()]
         polyline_points = " ".join([f"{p[0]:.2f},{p[1]:.2f}" for p in points_list])
-
         area_path = "M" + polyline_points
-        if points_list:
-            area_path += f" L{points_list[-1][0]:.2f},{h - pad_b} L{points_list[0][0]:.2f},{h - pad_b} Z"
-
-        y_grid_lines = ""
-        for i in range(5):
-            y_pos = pad_t + (chart_h / 4) * i
-            val = y_axis_max * (1 - i / 4)
-            y_grid_lines += f'<line x1="{pad_l}" y1="{y_pos}" x2="{pad_l + chart_w}" y2="{y_pos}" class="grid-line" />'
-            y_grid_lines += f'<text x="{pad_l - 8}" y="{y_pos + 4}" class="axis-label y-label">{val:.0f}</text>'
-
-        x_labels = ""
-        for i in range(5):
-            x_pos = pad_l + (chart_w / 4) * i
-            val = max_time * (i / 4)
-            x_labels += f'<text x="{x_pos}" y="{h - pad_b + 18}" class="axis-label x-label">{val:.1f}s</text>'
-
-        return f"""
-        <svg width="100%" viewBox="0 0 {w} {h}" class="chart">
-            <defs>
-                <linearGradient id="movement-gradient" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stop-color="var(--primary-color)" stop-opacity="0.2"/>
-                    <stop offset="100%" stop-color="var(--primary-color)" stop-opacity="0"/>
-                </linearGradient>
-            </defs>
-            {clipping_indicator}
-            {y_grid_lines}
-            <path d="{area_path}" class="area-movement" />
-            <polyline points="{polyline_points}" class="line-movement" />
-            <line x1="{pad_l}" y1="{h - pad_b}" x2="{w - pad_r}" y2="{h - pad_b}" class="axis-line" />
-            {x_labels}
-            <text x="{w / 2}" y="{h - 5}" class="axis-label title-label">Time</text>
-            <text transform="translate(15, {h / 2}) rotate(-90)" class="axis-label title-label">Acceleration</text>
-        </svg>
-        """
+        if points_list: area_path += f" L{points_list[-1][0]:.2f},{h - pad_b} L{points_list[0][0]:.2f},{h - pad_b} Z"
+        y_grid_lines = "".join([
+                                   f'<line x1="{pad_l}" y1="{pad_t + (chart_h / 4) * i}" x2="{pad_l + chart_w}" y2="{pad_t + (chart_h / 4) * i}" class="grid-line" /><text x="{pad_l - 8}" y="{pad_t + (chart_h / 4) * i + 4}" class="axis-label y-label">{(y_axis_max * (1 - i / 4)):.0f}</text>'
+                                   for i in range(5)])
+        x_labels = "".join([
+                               f'<text x="{pad_l + (chart_w / 4) * i}" y="{h - pad_b + 18}" class="axis-label x-label">{(max_time * (i / 4)):.1f}s</text>'
+                               for i in range(5)])
+        return f"""<svg width="100%" viewBox="0 0 {w} {h}" class="chart"><defs><linearGradient id="movement-gradient" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="var(--primary-color)" stop-opacity="0.2"/><stop offset="100%" stop-color="var(--primary-color)" stop-opacity="0"/></linearGradient></defs>{clipping_indicator}{y_grid_lines}<path d="{area_path}" class="area-movement" /><polyline points="{polyline_points}" class="line-movement" /><line x1="{pad_l}" y1="{h - pad_b}" x2="{w - pad_r}" y2="{h - pad_b}" class="axis-line" />{x_labels}<text x="{w / 2}" y="{h - 5}" class="axis-label title-label">Time</text><text transform="translate(15, {h / 2}) rotate(-90)" class="axis-label title-label">Acceleration</text></svg>"""
 
     # --- SVG HELPER 2: FREQUENCY (SPECTRUM) CHART with Robust Scaling ---
     def create_svg_frequency_chart(fft_df):
         fft_filt = fft_df[(fft_df['Frequency (Hz)'] >= 1) & (fft_df['Frequency (Hz)'] <= 25)].copy()
         if fft_filt.empty: return "<p class='chart-nodata'>No frequency data to display.</p>"
-
         fft_filt['log_power'] = np.log1p(fft_filt['Power'])
-
         w, h, pad_t, pad_b, pad_l, pad_r = 800, 250, 25, 40, 50, 20
         chart_w, chart_h = w - pad_l - pad_r, h - pad_t - pad_b
         max_freq = 25
-
-        # --- ROBUST Y-AXIS SCALING ---
-        # Use 98th percentile to prevent one massive peak from flattening all other bars.
         y_axis_max_log_power = (fft_filt['log_power'].quantile(0.98) or fft_filt['log_power'].mean() * 2 or 1)
-
         is_clipped = fft_filt['log_power'].max() > y_axis_max_log_power
         clipping_indicator = f'<text x="{w - pad_r}" y="{pad_t - 8}" class="clipping-indicator" text-anchor="end">▲ Tallest bar extends above chart</text>' if is_clipped else ''
-
         band_x_start = pad_l + (3 / max_freq) * chart_w
         band_width = ((7 - 3) / max_freq) * chart_w
         pd_band_rect = f'<rect x="{band_x_start}" y="{pad_t}" width="{band_width}" height="{chart_h}" class="pd-band" />'
-
         bar_width = (chart_w / max_freq) * 0.7
         bars = "".join([
-            f'<rect x="{pad_l + (row["Frequency (Hz)"] / max_freq) * chart_w - bar_width / 2:.2f}" '
-            f'y="{pad_t + chart_h - min(1, row["log_power"] / y_axis_max_log_power) * chart_h:.2f}" '  # min(1,...) caps the bar height at the chart edge
-            f'width="{bar_width}" height="{min(1, row["log_power"] / y_axis_max_log_power) * chart_h:.2f}" class="bar" rx="1"/>'
-            for _, row in fft_filt.iterrows()
-        ])
-
-        x_labels = ""
-        for freq_label in [5, 10, 15, 20, 25]:
-            x_pos = pad_l + (freq_label / max_freq) * chart_w
-            x_labels += f'<text x="{x_pos}" y="{h - pad_b + 18}" class="axis-label x-label">{freq_label} Hz</text>'
-
-        return f"""
-        <svg width="100%" viewBox="0 0 {w} {h}" class="chart">
-            {clipping_indicator}
-            {pd_band_rect}
-            <line x1="{pad_l}" y1="{h - pad_b}" x2="{w - pad_r}" y2="{h - pad_b}" class="axis-line" />
-            {bars}
-            {x_labels}
-            <text x="{w / 2}" y="{h - 5}" class="axis-label title-label">Frequency</text>
-            <text transform="translate(15, {h / 2}) rotate(-90)" class="axis-label title-label">Power (Log Scale)</text>
-        </svg>
-        <div class="legend"><span class="legend-item"><span class="legend-box pd-band-legend"></span>Parkinson's Band (3-7 Hz)</span></div>
-        """
+                           f'<rect x="{pad_l + (row["Frequency (Hz)"] / max_freq) * chart_w - bar_width / 2:.2f}" y="{pad_t + chart_h - min(1, row["log_power"] / y_axis_max_log_power) * chart_h:.2f}" width="{bar_width}" height="{min(1, row["log_power"] / y_axis_max_log_power) * chart_h:.2f}" class="bar" rx="1"/>'
+                           for _, row in fft_filt.iterrows()])
+        x_labels = "".join([
+                               f'<text x="{pad_l + (freq_label / max_freq) * chart_w}" y="{h - pad_b + 18}" class="axis-label x-label">{freq_label} Hz</text>'
+                               for freq_label in [5, 10, 15, 20, 25]])
+        return f"""<svg width="100%" viewBox="0 0 {w} {h}" class="chart">{clipping_indicator}{pd_band_rect}<line x1="{pad_l}" y1="{h - pad_b}" x2="{w - pad_r}" y2="{h - pad_b}" class="axis-line" />{bars}{x_labels}<text x="{w / 2}" y="{h - 5}" class="axis-label title-label">Frequency</text><text transform="translate(15, {h / 2}) rotate(-90)" class="axis-label title-label">Power (Log Scale)</text></svg><div class="legend"><span class="legend-item"><span class="legend-box pd-band-legend"></span>Parkinson's Band (3-7 Hz)</span></div>"""
 
     # --- PART 2: TEXTUAL ANALYSIS AND DATA GENERATION ---
-
     stage_text = metrics.get('stage', 'Unknown')
     match = re.search(r'(Stage\s*\d+)?\s*-?\s*(Mild|Moderate|Severe|Critical)', stage_text, re.IGNORECASE)
-
-    stage_number_html = ""
-    stage_name = stage_text
-
+    stage_number_html, stage_name = "", stage_text
     if match:
-        stage_num_part = match.group(1)
-        stage_name_part = match.group(2).capitalize()
+        stage_num_part, stage_name_part = match.group(1), match.group(2).capitalize()
         stage_name = stage_name_part
-        if stage_num_part:
-            stage_number_html = f'<span class="stage-number">{stage_num_part}</span>'
-
-    stage_styles = {
-        "Mild": {"bg": "#d1e7dd", "border": "#0f5132", "text": "#0a3622", "variable": "var(--color-mild)"},
-        "Moderate": {"bg": "#fff3cd", "border": "#ffc107", "text": "#664d03", "variable": "var(--color-moderate)"},
-        "Severe": {"bg": "#fde3d2", "border": "#fd7e14", "text": "#653209", "variable": "var(--color-severe)"},
-        "Critical": {"bg": "#f8d7da", "border": "#dc3545", "text": "#58151c", "variable": "var(--color-critical)"},
-    }
-    default_style = {"bg": "#e9ecef", "border": "#adb5bd", "text": "#495057", "variable": "var(--text-secondary)"}
+        if stage_num_part: stage_number_html = f'<span class="stage-number">{stage_num_part}</span>'
+    stage_styles = {"Mild": {"bg": "#d1e7dd", "border": "#0f5132", "text": "#0a3622"},
+                    "Moderate": {"bg": "#fff3cd", "border": "#ffc107", "text": "#664d03"},
+                    "Severe": {"bg": "#fde3d2", "border": "#fd7e14", "text": "#653209"},
+                    "Critical": {"bg": "#f8d7da", "border": "#dc3545", "text": "#58151c"}}
+    default_style = {"bg": "#e9ecef", "border": "#adb5bd", "text": "#495057"}
     selected_style = stage_styles.get(stage_name, default_style)
-
     if "Mild" in stage_name:
         prediction_advice = "The tremor is minimal. Continued monitoring for any changes is advised."
     elif "Moderate" in stage_name:
@@ -427,27 +354,21 @@ def generate_html_report(window_analysis, patient_details, window_str):
         prediction_advice = "The tremor is prominent and likely interferes with daily living. Intervention is highly recommended."
     else:
         prediction_advice = "The data indicates a critical level of motor symptoms requiring prompt review of the current management plan."
-
     stabilized_rms = np.sqrt(np.mean(df['total_mag_stable'] ** 2)) if 'total_mag_stable' in df else 0
-
-    metric_table_rows = "".join([
-        f"<tr><td>{label}</td><td>{val}</td></tr>" for label, val in [
-            ("Composite Severity Index", f"{metrics['composite_index']:.3f}"),
-            ("Peak Tremor Frequency", f"{metrics['peak_freq']:.2f} Hz"),
-            ("Power in Parkinson's Band (3-7Hz)", f"{metrics['band_power_3_7_ratio']:.1f} %"),
-            ("Overall Tremor Intensity (RMS)", f"{metrics['rms_tremor']:.0f}"),
-            ("Stabilizer Effectiveness", f"{metrics['effectiveness']:.1f} %"),
-            ("Movement Jerkiness (RMS Jerk)", f"{metrics['rms_jerk'] / 1000:.1f} k"),
-            ("Movement Randomness (Entropy)", f"{metrics['spectral_entropy']:.2f}"),
-            ("Crest Factor", f"{metrics['crest_factor']:.2f}"),
-            ("Signal Magnitude Area", f"{metrics['sma']:.1f}"),
-        ]
-    ])
+    metric_table_rows = "".join([f"<tr><td>{label}</td><td>{val}</td></tr>" for label, val in
+                                 [("Composite Severity Index", f"{metrics['composite_index']:.3f}"),
+                                  ("Peak Tremor Frequency", f"{metrics['peak_freq']:.2f} Hz"),
+                                  ("Power in Parkinson's Band (3-7Hz)", f"{metrics['band_power_3_7_ratio']:.1f} %"),
+                                  ("Overall Tremor Intensity (RMS)", f"{metrics['rms_tremor']:.0f}"),
+                                  ("Stabilizer Effectiveness", f"{metrics['effectiveness']:.1f} %"),
+                                  ("Movement Jerkiness (RMS Jerk)", f"{metrics['rms_jerk'] / 1000:.1f} k"),
+                                  ("Movement Randomness (Entropy)", f"{metrics['spectral_entropy']:.2f}"),
+                                  ("Crest Factor", f"{metrics['crest_factor']:.2f}"),
+                                  ("Signal Magnitude Area", f"{metrics['sma']:.1f}")]])
 
     # --- PART 3: HTML ASSEMBLY ---
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    movement_chart_svg = create_svg_movement_chart(df)
-    frequency_chart_svg = create_svg_frequency_chart(fft_df)
+    movement_chart_svg, frequency_chart_svg = create_svg_movement_chart(df), create_svg_frequency_chart(fft_df)
 
     html = f"""
 <!DOCTYPE html>
@@ -459,38 +380,19 @@ def generate_html_report(window_analysis, patient_details, window_str):
   :root {{
     --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, Helvetica, Arial, sans-serif;
     --font-mono: 'Menlo', 'Consolas', 'SFMono-Regular', 'source-code-pro', monospace;
-    --bg-color: #f8f9fa;
-    --card-bg-color: #ffffff;
-    --text-primary: #212529;
-    --text-secondary: #6c757d;
-    --border-color: #e9ecef;
-    --primary-color: #0d6efd;
-    --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-    --border-radius: 0.75rem;
-    --color-mild: #198754;
-    --color-moderate: #ffc107;
-    --color-severe: #fd7e14;
-    --color-critical: #dc3545;
+    --bg-color: #f8f9fa; --card-bg-color: #ffffff; --text-primary: #212529; --text-secondary: #6c757d;
+    --border-color: #e9ecef; --primary-color: #0d6efd; --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --border-radius: 0.75rem; --color-mild: #198754; --color-moderate: #ffc107; --color-severe: #fd7e14; --color-critical: #dc3545;
   }}
-  body {{
-    font-family: var(--font-sans); margin: 0; padding: 2rem 1rem;
-    background-color: var(--bg-color); color: var(--text-primary);
-    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
-  }}
-  .container {{
-    max-width: 900px; margin: 0 auto; background-color: var(--card-bg-color);
-    box-shadow: var(--shadow); border-radius: var(--border-radius); overflow: hidden;
-  }}
-  .header {{
-    padding: 2rem 2.5rem; border-bottom: 1px solid var(--border-color);
-    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;
-  }}
-  .header h1 {{ margin: 0; font-size: 1.75rem; font-weight: 700; color: var(--text-primary); }}
+  body {{ font-family: var(--font-sans); margin: 0; padding: 2rem 1rem; background-color: var(--bg-color); color: var(--text-primary); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }}
+  .container {{ max-width: 900px; margin: 0 auto; background-color: var(--card-bg-color); box-shadow: var(--shadow); border-radius: var(--border-radius); overflow: hidden; }}
+  .header {{ padding: 2rem 2.5rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }}
+  .header h1 {{ margin: 0; font-size: 1.75rem; font-weight: 700; }}
   .header-meta {{ text-align: right; font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5; }}
   .content {{ padding: 2.5rem; display: grid; gap: 2.5rem; }}
   .card-header {{ display: flex; align-items: center; gap: 0.75rem; padding-bottom: 1rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); }}
   .card-header .icon {{ flex-shrink: 0; width: 24px; height: 24px; color: var(--primary-color); }}
-  .card-header h2 {{ font-size: 1.25rem; font-weight: 600; margin: 0; color: var(--text-primary); }}
+  .card-header h2 {{ font-size: 1.25rem; font-weight: 600; margin: 0; }}
 
   .metrics-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; }}
   .metric-card {{ background-color: #f8f9fa; padding: 1.25rem; border-radius: 0.5rem; border: 1px solid var(--border-color); transition: transform 0.2s ease, box-shadow 0.2s ease; }}
@@ -505,25 +407,23 @@ def generate_html_report(window_analysis, patient_details, window_str):
   .stage-number {{ display: block; font-size: 1rem; font-weight: 500; opacity: 0.8; margin-bottom: 0.25rem; }}
 
   .advice-card {{ padding: 1.25rem; border-radius: 0.5rem; background-color: #e9ecef40; border-left: 4px solid var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }}
-  .advice-card p {{ margin: 0; color: var(--text-primary); }}
+  .advice-card p {{ margin: 0; }}
 
   .observation-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; }}
   .observation-card {{ background: #fff; border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 1.25rem; }}
   .observation-card-header {{ display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }}
-  .observation-card-icon {{ flex-shrink: 0; width: 24px; height: 24px; color: var(--primary-color); }}
+  .observation-card-header .icon {{ flex-shrink: 0; width: 22px; height: 22px; color: var(--primary-color); }}
   .observation-card-title {{ font-size: 1rem; font-weight: 600; margin: 0; }}
   .observation-card-body {{ font-size: 0.9rem; line-height: 1.6; color: var(--text-secondary); }}
   .observation-card-body strong {{ color: var(--text-primary); font-weight: 600; }}
 
   .data-table {{ width: 100%; border-collapse: collapse; font-size: 0.95rem; }}
-  .data-table tr:last-child {{ border-bottom: none; }}
   .data-table td {{ padding: 1rem 0.5rem; vertical-align: middle; border-bottom: 1px solid var(--border-color); }}
+  .data-table tr:last-child td {{ border-bottom: none; }}
 
   .chart-container {{ border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 1rem; background-color: var(--card-bg-color); position: relative; }}
   .chart-nodata {{ padding: 3rem 1rem; text-align: center; color: var(--text-secondary); }}
-  .chart {{ background-color: var(--card-bg-color); }}
-  .grid-line {{ stroke: #eef2f6; stroke-width: 1; }}
-  .axis-line {{ stroke: #adb5bd; stroke-width: 1; }}
+  .grid-line {{ stroke: #eef2f6; stroke-width: 1; }} .axis-line {{ stroke: #adb5bd; stroke-width: 1; }}
   .axis-label {{ font-size: 11px; fill: var(--text-secondary); }}
   .y-label {{ text-anchor: end; }} .x-label {{ text-anchor: middle; }}
   .title-label {{ font-weight: 500; fill: var(--text-primary); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }}
@@ -532,6 +432,8 @@ def generate_html_report(window_analysis, patient_details, window_str):
   .bar {{ fill: var(--primary-color); }}
   .pd-band {{ fill: var(--color-critical); opacity: 0.1; }}
   .legend {{ padding-top: 10px; text-align: center; font-size: 12px; color: var(--text-secondary); }}
+  .legend-item {{ display: inline-flex; align-items: center; margin: 0 10px; }}
+  .legend-box {{ width: 14px; height: 14px; margin-right: 5px; border-radius: 3px; background-color: rgba(220, 53, 69, 0.3); }}
   .clipping-indicator {{ font-size: 10px; font-style: italic; fill: var(--text-secondary); }}
 
   .footer {{ text-align: center; color: var(--text-secondary); padding: 2.5rem; background-color: var(--bg-color); }}
@@ -542,85 +444,21 @@ def generate_html_report(window_analysis, patient_details, window_str):
 </head>
 <body>
   <div class="container">
-    <header class="header">
-        <h1>Movement Analysis Report</h1>
-        <div class="header-meta">
-            <strong>Patient:</strong> {patient_details.get('patient_id', 'N/A')}<br>
-            <strong>Date:</strong> {patient_details.get('timestamp', 'N/A')} | <strong>Window:</strong> {window_str}
-        </div>
-    </header>
+    <header class="header"><h1>Movement Analysis Report</h1><div class="header-meta"><strong>Patient:</strong> {patient_details.get('patient_id', 'N/A')}<br><strong>Date:</strong> {patient_details.get('timestamp', 'N/A')} | <strong>Window:</strong> {window_str}</div></header>
     <main class="content">
-        <section class="card">
-            <div class="card-header">{svg_icons["dashboard"]}<h2>Analysis Summary</h2></div>
-            <div class="metrics-grid">
-                <div class="metric-card severity-card">
-                    <p class="metric-card-title">Predicted Severity</p>
-                    <p class="metric-card-value">{stage_number_html}{stage_name}</p>
-                </div>
-                <div class="metric-card">
-                    <p class="metric-card-title">Composite Index</p>
-                    <p class="metric-card-value">{metrics['composite_index']:.3f}</p>
-                </div>
-                <div class="metric-card">
-                    <p class="metric-card-title">Peak Frequency</p>
-                    <p class="metric-card-value">{metrics['peak_freq']:.2f}<span class="metric-card-unit">Hz</span></p>
-                </div>
-                <div class="metric-card">
-                    <p class="metric-card-title">Stabilizer Effectiveness</p>
-                    <p class="metric-card-value">{metrics['effectiveness']:.1f}<span class="metric-card-unit">%</span></p>
-                </div>
-            </div>
-            <div style="margin-top: 1.5rem;" class="advice-card">
-                <p><strong>Clinical Advice:</strong> {prediction_advice}</p>
-            </div>
-        </section>
-
-        <section class="card">
-            <div class="card-header">{svg_icons["list_check"]}<h2>Detailed Observations</h2></div>
-            <div class="observation-grid">
-                <div class="observation-card">
-                    <div class="observation-card-header">{svg_icons["zap"]}<h3 class="observation-card-title">Intensity & Effectiveness</h3></div>
-                    <div class="observation-card-body">Raw tremor power was <strong>{metrics['rms_tremor']:.0f} RMS</strong>. The device reduced this to <strong>{stabilized_rms:.0f} RMS</strong>, showing an effectiveness of <strong>{metrics['effectiveness']:.1f}%</strong>.</div>
-                </div>
-                <div class="observation-card">
-                    <div class="observation-card-header">{svg_icons["activity"]}<h3 class="observation-card-title">Frequency Profile</h3></div>
-                    <div class="observation-card-body">A dominant tremor was found at <strong>{metrics['peak_freq']:.2f} Hz</strong>, with <strong>{metrics['band_power_3_7_ratio']:.1f}%</strong> of energy in the 3-7 Hz Parkinsonian band.</div>
-                </div>
-                <div class="observation-card">
-                    <div class="observation-card-header">{svg_icons["sparkles"]}<h3 class="observation-card-title">Movement Quality</h3></div>
-                    <div class="observation-card-body">Movement smoothness (jerkiness) was <strong>{metrics['rms_jerk'] / 1000:.1f}k</strong>. Entropy of <strong>{metrics['spectral_entropy']:.2f}</strong> suggests a {'highly regular tremor.' if metrics['spectral_entropy'] < 3.5 else 'somewhat irregular tremor.'}</div>
-                </div>
-            </div>
-        </section>
-
-        <section class="card">
-            <div class="card-header">{svg_icons["chart_line"]}<h2>Hand Movement Analysis</h2></div>
-            <div class="chart-container">{movement_chart_svg}</div>
-        </section>
-
-        <section class="card">
-            <div class="card-header">{svg_icons["chart_bar"]}<h2>Frequency Spectrum</h2></div>
-            <div class="chart-container">{frequency_chart_svg}</div>
-        </section>
-
-        <section class="card">
-            <div class="card-header">{svg_icons["table"]}<h2>All Numerical Data</h2></div>
-            <table class="data-table">{metric_table_rows}</table>
-        </section>
+        <section class="card"><div class="card-header">{svg_icons["dashboard"]}<h2>Analysis Summary</h2></div><div class="metrics-grid"><div class="metric-card severity-card"><p class="metric-card-title">Predicted Severity</p><p class="metric-card-value">{stage_number_html}{stage_name}</p></div><div class="metric-card"><p class="metric-card-title">Composite Index</p><p class="metric-card-value">{metrics['composite_index']:.3f}</p></div><div class="metric-card"><p class="metric-card-title">Peak Frequency</p><p class="metric-card-value">{metrics['peak_freq']:.2f}<span class="metric-card-unit">Hz</span></p></div><div class="metric-card"><p class="metric-card-title">Stabilizer Effectiveness</p><p class="metric-card-value">{metrics['effectiveness']:.1f}<span class="metric-card-unit">%</span></p></div></div><div style="margin-top: 1.5rem;" class="advice-card"><p><strong>Clinical Advice:</strong> {prediction_advice}</p></div></section>
+        <section class="card"><div class="card-header">{svg_icons["list_check"]}<h2>Detailed Observations</h2></div><div class="observation-grid"><div class="observation-card"><div class="observation-card-header">{svg_icons["zap"]}<h3 class="observation-card-title">Intensity & Effectiveness</h3></div><div class="observation-card-body">Raw tremor power was <strong>{metrics['rms_tremor']:.0f} RMS</strong>. The device reduced this to <strong>{stabilized_rms:.0f} RMS</strong>, showing an effectiveness of <strong>{metrics['effectiveness']:.1f}%</strong>.</div></div><div class="observation-card"><div class="observation-card-header">{svg_icons["activity"]}<h3 class="observation-card-title">Frequency Profile</h3></div><div class="observation-card-body">A dominant tremor was found at <strong>{metrics['peak_freq']:.2f} Hz</strong>, with <strong>{metrics['band_power_3_7_ratio']:.1f}%</strong> of energy in the 3-7 Hz Parkinsonian band.</div></div><div class="observation-card"><div class="observation-card-header">{svg_icons["sparkles"]}<h3 class="observation-card-title">Movement Quality</h3></div><div class="observation-card-body">Movement smoothness (jerkiness) was <strong>{metrics['rms_jerk'] / 1000:.1f}k</strong>. Entropy of <strong>{metrics['spectral_entropy']:.2f}</strong> suggests a {'highly regular tremor.' if metrics['spectral_entropy'] < 3.5 else 'somewhat irregular tremor.'}</div></div></div></section>
+        <section class="card"><div class="card-header">{svg_icons["chart_line"]}<h2>Hand Movement Analysis</h2></div><div class="chart-container">{movement_chart_svg}</div></section>
+        <section class="card"><div class="card-header">{svg_icons["chart_bar"]}<h2>Frequency Spectrum</h2></div><div class="chart-container">{frequency_chart_svg}</div></section>
+        <section class="card"><div class="card-header">{svg_icons["table"]}<h2>All Numerical Data</h2></div><table class="data-table">{metric_table_rows}</table></section>
     </main>
-    <footer class="footer">
-      <p class="timestamp">Report generated on {now}. This is a quantitative report for clinical review and research purposes.</p>
-      <div class="project-footer">
-          <p class="title">Project: Vibration Analyzed Smart Glove to Aid Parkinson's Patient Hand Tremor with Postural Stability</p>
-          <p><strong>Team:</strong> 22LE1-035 S.A.P.U.Hemachandra | 22LE2-082 I.H.C.Udayanga | Group: B 07-18</p>
-          <p><strong>Supervisor:</strong> Mr. Nuwan Attanayake</p>
-      </div>
-    </footer>
+    <footer class="footer"><p class="timestamp">Report generated on {now}. This is a quantitative report for clinical review and research purposes.</p><div class="project-footer"><p class="title">Project: Vibration Analyzed Smart Glove to Aid Parkinson's Patient Hand Tremor with Postural Stability</p><p><strong>Team:</strong> 22LE1-035 S.A.P.U.Hemachandra | 22LE2-082 I.H.C.Udayanga | Group: B 07-18</p><p><strong>Supervisor:</strong> Mr. Nuwan Attanayake</p></div></footer>
   </div>
 </body>
 </html>
 """
     return html
+
 
 
 
