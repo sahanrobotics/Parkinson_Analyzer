@@ -6,7 +6,7 @@ The primary goal is to provide a quantitative, multi-faceted assessment of tremo
 
 ## 📸 Dashboard Screenshots
 
-*(Note: You will need to take your own screenshots and place them in a `screenshots` folder for them to appear here.)*
+**Important:** You must take screenshots of your running application and place them in a `screenshots` folder in your project directory for them to appear here.
 
 | Composite Index & Main Metrics | Movement Overview Tab |
 | :---: | :---: |
@@ -79,20 +79,24 @@ DB_SECRET = "YourDatabaseSecretKey"
 - **`FIREBASE_URL`**: The URL of your Firebase Realtime Database.
 - **`DB_SECRET`**: Your database secret or an authentication token. You can find this in your Firebase project settings under `Service accounts` > `Database secrets`.
 
-**Note:** The code has these values hardcoded. For production or sharing, it's highly recommended to modify the script to load them from `st.secrets` as shown below to keep your credentials secure.
+**Note:** The provided Python script has these values hardcoded. For better security, it's highly recommended to modify the script to load them from `st.secrets` as shown below. This prevents your credentials from being exposed in the source code.
 
 ```python
 # Recommended modification in the Python script
-FIREBASE_URL = st.secrets["FIREBASE_URL"]
-DB_SECRET = st.secrets["DB_SECRET"]
+try:
+    FIREBASE_URL = st.secrets["FIREBASE_URL"]
+    DB_SECRET = st.secrets["DB_SECRET"]
+except (AttributeError, FileNotFoundError):
+    st.error("Firebase secrets not found. Please create a `.streamlit/secrets.toml` file.")
+    st.stop()
 ```
 
 ### 6. Run the Streamlit App
 
-From your terminal, run the following command:
+From your terminal, run the following command (replace `app.py` with the name of your Python script file):
 
 ```bash
-streamlit run your_script_name.py
+streamlit run app.py
 ```
 
 The application will open in a new tab in your web browser.
@@ -107,9 +111,9 @@ The core of this application is its ability to transform raw accelerometer data 
 - **Time Normalization:** The raw timestamp `t` (in milliseconds) is converted into a relative time `time_s` (in seconds) starting from zero for easier analysis.
 - **Magnitude Calculation:** For each sensor, the individual X, Y, and Z acceleration values are combined into a single measure of total acceleration magnitude. This simplifies the primary analysis by representing the overall movement intensity. The formula used is the Euclidean norm:
 
-  $$
+  ```math
   Magnitude = \sqrt{a_x^2 + a_y^2 + a_z^2}
-  $$
+  ```
 
 ### 2. Time-Domain Analysis
 
@@ -117,15 +121,15 @@ This analysis examines the signal's characteristics over time.
 
 - **Root Mean Square (RMS):** Represents the effective power or intensity of the tremor signal. A higher RMS value indicates a more intense tremor.
 
-  $$
+  ```math
   RMS = \sqrt{\frac{1}{N}\sum_{i=1}^{N} x_i^2}
-  $$
+  ```
 
 - **Jerk:** Jerk is the rate of change of acceleration (the third derivative of position). In this context, it serves as a proxy for the smoothness of the movement. A high RMS of Jerk implies a jerky, non-smooth tremor. It is calculated numerically using the gradient of the acceleration magnitude.
 
-  $$
+  ```math
   Jerk = \frac{d(Acceleration)}{dt}
-  $$
+  ```
 
 ### 3. Frequency-Domain Analysis
 
@@ -133,26 +137,26 @@ This analysis, using the Fast Fourier Transform (FFT), breaks down the tremor si
 
 - **Power Spectrum:** The FFT reveals the power or energy present at each frequency. A classic Parkinsonian tremor typically shows a dominant peak in the 3-7 Hz range.
 
-  $$
+  ```math
   Power(f) = |FFT(signal)|^2
-  $$
+  ```
 
 - **Power in Band Ratio:** This is the ratio of signal power contained within a specific frequency band (e.g., 4-8 Hz) to the total power of the signal. It quantifies how much the tremor conforms to the typical Parkinsonian frequency profile.
 
 - **Spectral Entropy:** Measures the uniformity or randomness of the power spectrum. A low entropy value indicates that the tremor's energy is concentrated at a few specific frequencies (a regular, predictable tremor), while a high entropy value suggests energy is spread out across many frequencies (a chaotic, irregular tremor).
 
-  $$
+  ```math
   H(P) = -\sum_{f} p(f) \log_2 p(f)
-  $$
+  ```
   where $p(f)$ is the normalized power at frequency $f$.
 
 ### 4. Composite Tremor Index
 
 To simplify the multi-faceted analysis into a single score, a **Composite Tremor Index** is calculated. It's a weighted average of normalized key metrics, providing a holistic view of tremor severity.
 
-$$
+```math
 Index = \frac{w_{rms} \cdot \text{norm}_{rms} + w_{freq} \cdot \text{norm}_{freq} + w_{jerk} \cdot \text{norm}_{jerk}}{w_{rms} + w_{freq} + w_{jerk}}
-$$
+```
 
 - $\text{norm}_{rms}$: RMS value, normalized.
 - $\text{norm}_{freq}$: Power in the 4-8Hz band, normalized.
@@ -201,3 +205,4 @@ These tabs are for technical users who want to inspect the raw data. They show t
 - **Data Fetching:** Requests
 - **Database:** Google Firebase Realtime Database
 
+####  Sahan Sadeepa 2025
