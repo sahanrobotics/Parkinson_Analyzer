@@ -260,22 +260,26 @@ def format_stage_with_color(stage_string):
     return f"<span style='color: #333;'>{stage_string}</span>"
 
 
-# --- HTML REPORT GENERATION FUNCTION (with enhanced error handling) ---
+# --- HTML REPORT GENERATION FUNCTION (IMPROVED FOR CLOUD DEPLOYMENT) ---
 def generate_html_report(window_analysis, patient_details, window_str):
     """Generates a self-contained, printable HTML report for a specific data window."""
     df, metrics, fft_df, _, _ = window_analysis
 
+    # Placeholder to return on image generation failure
+    FAILURE_PLACEHOLDER = "IMAGE_GENERATION_FAILED"
+
     def fig_to_base64(fig):
         """Converts a Plotly figure to a base64 string, with a fallback for errors."""
         try:
-            img_bytes = fig.to_image(format="png", scale=2, engine="kaleido")
+            # Added a timeout to prevent hanging on cloud platforms
+            img_bytes = fig.to_image(format="png", scale=2, engine="kaleido", timeout=10)
             return base64.b64encode(img_bytes).decode()
         except Exception as e:
-            # Log error to console and return a placeholder if Kaleido fails
-            print(f"Warning: Could not render figure for HTML report (Kaleido error): {e}")
-            # Base64 for a 1x1 transparent GIF
-            return "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+            # This error will be visible in the Streamlit Cloud logs
+            print(f"CRITICAL: Kaleido failed to generate an image for the report. Error: {e}")
+            return FAILURE_PLACEHOLDER
 
+    # --- Generate Figures ---
     fig_gauge = go.Figure(go.Indicator(
         mode="gauge+number", value=metrics['composite_index'], number={'valueformat': '.2f'},
         domain={'x': [0, 1], 'y': [0, 1]}, title={'text': f"Severity Index ({metrics['stage']})"},
@@ -297,6 +301,17 @@ def generate_html_report(window_analysis, patient_details, window_str):
     fig_fft.update_xaxes(range=[0, 25]);
     fig_fft.update_layout(height=350)
     fft_b64 = fig_to_base64(fig_fft)
+
+    # --- Helper to create image tag or failure message ---
+    def create_image_html(base64_string, alt_text):
+        if base64_string == FAILURE_PLACEHOLDER:
+            return f'<p style="color:red; border: 1px solid red; padding: 10px; background-color: #fff0f0;"><b>Error:</b> The "{alt_text}" graph could not be rendered. This is likely due to a missing system dependency on the server. Please add required packages to `packages.txt`.</p>'
+        return f'<img src="data:image/png;base64,{base64_string}" alt="{alt_text}">'
+
+    # --- Create HTML content with fallback messages ---
+    gauge_html = create_image_html(gauge_b64, "Severity Gauge")
+    ts_html = create_image_html(ts_b64, "Movement Over Time")
+    fft_html = create_image_html(fft_b64, "Frequency Spectrum")
 
     summary_text = f"Analysis of the <b>{window_str}</b> window indicates a <b>'{metrics['stage']}'</b> tremor severity, with an intensity (RMS Power) of <b>{metrics['rms_tremor']:.0f}</b> and a dominant frequency of <b>{metrics['peak_freq']:.2f} Hz</b>. The stabilizer effectiveness during this period was <b>{metrics['effectiveness']:.1f}%</b>."
     key_metrics_data = [
@@ -332,17 +347,15 @@ def generate_html_report(window_analysis, patient_details, window_str):
             <p><strong>Report Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
         </div>
         <h2>1. Overall Assessment</h2><div class="summary"><p>{summary_text}</p></div>
-        <h3>Severity Index</h3><div class="chart-static"><img src="data:image/png;base64,{gauge_b64}"></div>
+        <h3>Severity Index</h3><div class="chart-static">{gauge_html}</div>
         <h2>2. Key Clinical Metrics for this Window</h2><table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>{metrics_rows_html}</tbody></table>
         <h2>3. Visual Analysis for this Window</h2>
-        <h3>Movement Over Time</h3><div class="chart-static"><img src="data:image/png;base64,{ts_b64}"></div>
-        <h3>Frequency Spectrum</h3><div class="chart-static"><img src="data:image/png;base64,{fft_b64}"></div>
+        <h3>Movement Over Time</h3><div class="chart-static">{ts_html}</div>
+        <h3>Frequency Spectrum</h3><div class="chart-static">{fft_html}</div>
         <div class="footer"><p>This report was automatically generated. Please consult a medical professional for diagnosis.</p></div>
     </div></body></html>
     """
     return html_template
-
-
 # --- MAIN DASHBOARD DISPLAY (Unchanged) ---
 def display_dashboard(df, metrics, fft_df, spec_data, corr_matrix, display_info, current_window=None):
     st.title("Advanced Parkinson's Movement Analyzer")
