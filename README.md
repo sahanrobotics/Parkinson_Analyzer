@@ -158,6 +158,9 @@ To simplify the multi-faceted analysis into a single score, a **Composite Tremor
 Index = \frac{w_{rms} \cdot \text{norm}_{rms} + w_{freq} \cdot \text{norm}_{freq} + w_{jerk} \cdot \text{norm}_{jerk}}{w_{rms} + w_{freq} + w_{jerk}}
 ```
 
+![Main Dashboard](./screenshots/img16.png)
+
+
 - $\text{norm}_{rms}$: RMS value, normalized.
 - $\text{norm}_{freq}$: Power in the 4-8Hz band, normalized.
 - $\text{norm}_{jerk}$: RMS of Jerk, normalized.
