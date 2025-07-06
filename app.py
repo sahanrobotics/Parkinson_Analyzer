@@ -712,14 +712,19 @@ with st.sidebar:
 
                 st.subheader("Window Navigation")
                 st.write(f"**Viewing:** `{start_time:.1f}s - {end_time:.1f}s` of `{total_duration:.1f}s` total.")
-                if total_duration > 2.0:
+                if total_duration and isinstance(total_duration, (int, float)) and total_duration > 2.0:
                     col1, col2 = st.columns(2)
-                    if col1.button("Previous Window", use_container_width=True, disabled=(start_time <= 0)):
-                        st.session_state.current_window_start = max(0.0, st.session_state.current_window_start - 2.0);
+
+                    prev_disabled = not isinstance(start_time, (int, float)) or start_time <= 0
+                    next_disabled = not isinstance(end_time, (int, float)) or end_time >= total_duration
+
+                    if col1.button("Previous Window", use_container_width=True, disabled=prev_disabled):
+                        st.session_state.current_window_start = max(0.0, st.session_state.current_window_start - 2.0)
                         st.rerun()
-                    if col2.button("Next Window", use_container_width=True, disabled=(end_time >= total_duration)):
+
+                    if col2.button("Next Window", use_container_width=True, disabled=next_disabled):
                         st.session_state.current_window_start = min(total_duration - 2.0,
-                                                                    st.session_state.current_window_start + 2.0);
+                                                                    st.session_state.current_window_start + 2.0)
                         st.rerun()
 
                 st.divider()
@@ -833,6 +838,7 @@ st.markdown("""
         <b>Supervisor:</b> Mr. Nuwan Attanayake
     </div>
 """, unsafe_allow_html=True)
+
 
 # --- Auto-Refresh Logic ---
 if st.session_state.is_running and st.session_state.mode == 'Live':
