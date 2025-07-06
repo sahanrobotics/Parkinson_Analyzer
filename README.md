@@ -159,6 +159,7 @@ Index = \frac{w_{rms} \cdot \text{norm}_{rms} + w_{freq} \cdot \text{norm}_{freq
 ```
 
 ![Main Dashboard](./screenshots/img16.png)
+*Figure: Weighted Sum *
 
 
 - $\text{norm}_{rms}$: RMS value, normalized.
