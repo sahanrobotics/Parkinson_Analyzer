@@ -161,76 +161,114 @@ def delete_recording_from_firebase(recording_id, URL, KEY):
 
 # --- ADVANCED ANALYSIS FUNCTION (with enhanced error handling) ---
 def perform_advanced_analysis(data):
-    if not data or not isinstance(data, list) or len(data) < 20: return None
+    if not data or not isinstance(data, list) or len(data) < 20:
+        return None
     try:
         df = pd.DataFrame(data)
-        if 't' not in df.columns or 'A1' not in df.columns or 'A2' not in df.columns: return None
+        if 't' not in df.columns or 'A1' not in df.columns or 'A2' not in df.columns:
+            return None
+
         df['time_s'] = (df['t'] - df['t'].iloc[0]) / 1000.0
         df[['ax1', 'ay1', 'az1']] = pd.DataFrame(df['A1'].tolist(), index=df.index, dtype=np.float64)
         df[['ax2', 'ay2', 'az2']] = pd.DataFrame(df['A2'].tolist(), index=df.index, dtype=np.float64)
+
         duration = df['time_s'].iloc[-1] - df['time_s'].iloc[0]
-        if duration <= 0: return None
+        if duration <= 0:
+            return None
         fs = len(df) / duration
+
         if df['ax1'].std() < 1e-4 and df['ay1'].std() < 1e-4 and df['az1'].std() < 1e-4:
             st.warning("Sensor 1 data shows no significant movement. All clinical features will be zero.")
             zero_metrics = {k: 0 for k in
                             ["rms_tremor", "stage", "sampling_freq", "effectiveness", "rms_jerk", "power_in_band_ratio",
                              "spectral_entropy", "composite_index", "peak_freq", "band_power_3_7_ratio", "sma",
                              "crest_factor", "zcr"]}
-            zero_metrics['std_dev_axes'] = {'ax1': 0, 'ay1': 0, 'az1': 0};
+            zero_metrics['std_dev_axes'] = {'ax1': 0, 'ay1': 0, 'az1': 0}
             zero_metrics['stage'] = "No Tremor Detected"
             zero_corr = pd.DataFrame(np.identity(3), columns=['ax1', 'ay1', 'az1'], index=['ax1', 'ay1', 'az1'])
             f_spec, t_spec, Sxx = spectrogram(np.zeros(len(df)), fs)
             return df, zero_metrics, pd.DataFrame({'Frequency (Hz)': [], 'Power': []}), (f_spec, t_spec, Sxx), zero_corr
+
         df['total_mag'] = np.sqrt(df['ax1'] ** 2 + df['ay1'] ** 2 + df['az1'] ** 2)
         df['total_mag_stable'] = np.sqrt(df['ax2'] ** 2 + df['ay2'] ** 2 + df['az2'] ** 2)
         rms_tremor = np.sqrt(np.mean(df['total_mag'] ** 2))
         df['jerk'] = np.gradient(df['total_mag'], df['time_s'])
         rms_jerk = np.sqrt(np.mean(df['jerk'] ** 2))
-        N = len(df['total_mag']);
-        yf = rfft(df['total_mag'].to_numpy());
+
+        N = len(df['total_mag'])
+        yf = rfft(df['total_mag'].to_numpy())
         xf = rfftfreq(N, 1 / fs)
-        power_spectrum = np.abs(yf) ** 2;
+        power_spectrum = np.abs(yf) ** 2
         fft_df = pd.DataFrame({'Frequency (Hz)': xf, 'Power': power_spectrum})
+
         total_power = np.sum(power_spectrum)
-        if total_power == 0: total_power = 1e-9
+        if total_power == 0:
+            total_power = 1e-9
+
         power_in_band_4_8_mask = (xf >= 4) & (xf <= 8)
-        power_in_band_4_8 = np.sum(power_spectrum[power_in_band_4_8_mask]);
+        power_in_band_4_8 = np.sum(power_spectrum[power_in_band_4_8_mask])
         power_in_band_ratio_4_8 = power_in_band_4_8 / total_power
         spectral_entropy_val = entropy(power_spectrum / total_power)
-        norm_rms = min(rms_tremor / 4000, 1.0);
-        norm_power_ratio = power_in_band_ratio_4_8;
+
+        norm_rms = min(rms_tremor / 4000, 1.0)
+        norm_power_ratio = power_in_band_ratio_4_8
         norm_jerk = min(rms_jerk / 100000, 1.0)
-        weights = st.session_state;
+
+        weights = st.session_state
         weight_sum = weights.w_rms + weights.w_freq + weights.w_jerk
         composite_index = (
-                                      weights.w_rms * norm_rms + weights.w_freq * norm_power_ratio + weights.w_jerk * norm_jerk) / weight_sum if weight_sum > 0 else 0
-        f_spec, t_spec, Sxx = spectrogram(df['total_mag'], fs);
-        peak_freq_idx = np.argmax(power_spectrum)
-        peak_freq = xf[peak_freq_idx] if peak_freq_idx < len(xf) else len(xf)
-        power_in_band_3_7_mask = (xf >= 3) & (xf <= 7);
+            weights.w_rms * norm_rms + weights.w_freq * norm_power_ratio + weights.w_jerk * norm_jerk
+        ) / weight_sum if weight_sum > 0 else 0
+
+        f_spec, t_spec, Sxx = spectrogram(df['total_mag'], fs)
+
+        # FIXED PEAK FREQUENCY CALCULATION
+        if len(power_spectrum) > 1:
+            peak_freq_idx = np.argmax(power_spectrum[1:]) + 1  # Skip the first bin (DC component)
+            peak_freq = xf[peak_freq_idx] if peak_freq_idx < len(xf) else 0
+        else:
+            peak_freq = 0
+
+        power_in_band_3_7_mask = (xf >= 3) & (xf <= 7)
         power_in_band_3_7 = np.sum(power_spectrum[power_in_band_3_7_mask])
         power_in_band_ratio_3_7 = power_in_band_3_7 / total_power
+
         sma = np.sum(np.abs(df['ax1']) + np.abs(df['ay1']) + np.abs(df['az1'])) / fs
         std_dev_axes = df[['ax1', 'ay1', 'az1']].std().to_dict()
         crest_factor = df['total_mag'].max() / rms_tremor if rms_tremor > 0 else 0
-        zcr_x = np.sum(np.abs(np.diff(np.sign(df['ax1'].to_numpy())))) / (2 * duration);
+
+        zcr_x = np.sum(np.abs(np.diff(np.sign(df['ax1'].to_numpy())))) / (2 * duration)
         zcr_y = np.sum(np.abs(np.diff(np.sign(df['ay1'].to_numpy())))) / (2 * duration)
-        zcr_z = np.sum(np.abs(np.diff(np.sign(df['az1'].to_numpy())))) / (2 * duration);
+        zcr_z = np.sum(np.abs(np.diff(np.sign(df['az1'].to_numpy())))) / (2 * duration)
         zcr_total = zcr_x + zcr_y + zcr_z
+
         correlation_matrix = df[['ax1', 'ay1', 'az1']].corr()
-        metrics = {"rms_tremor": rms_tremor, "stage": classify_stage_by_index(composite_index), "sampling_freq": fs,
-                   "effectiveness": (1 - (
-                               np.sqrt(np.mean(df['total_mag_stable'] ** 2)) / rms_tremor)) * 100 if rms_tremor > 0 else 0,
-                   "rms_jerk": rms_jerk, "power_in_band_ratio": power_in_band_ratio_4_8 * 100,
-                   "spectral_entropy": spectral_entropy_val, "composite_index": composite_index, "peak_freq": peak_freq,
-                   "band_power_3_7_ratio": power_in_band_ratio_3_7 * 100, "sma": sma, "std_dev_axes": std_dev_axes,
-                   "crest_factor": crest_factor, "zcr": zcr_total, "duration": duration}
+
+        metrics = {
+            "rms_tremor": rms_tremor,
+            "stage": classify_stage_by_index(composite_index),
+            "sampling_freq": fs,
+            "effectiveness": (1 - (np.sqrt(np.mean(df['total_mag_stable'] ** 2)) / rms_tremor)) * 100 if rms_tremor > 0 else 0,
+            "rms_jerk": rms_jerk,
+            "power_in_band_ratio": power_in_band_ratio_4_8 * 100,
+            "spectral_entropy": spectral_entropy_val,
+            "composite_index": composite_index,
+            "peak_freq": peak_freq,
+            "band_power_3_7_ratio": power_in_band_ratio_3_7 * 100,
+            "sma": sma,
+            "std_dev_axes": std_dev_axes,
+            "crest_factor": crest_factor,
+            "zcr": zcr_total,
+            "duration": duration
+        }
+
         return df, metrics, fft_df, (f_spec, t_spec, Sxx), correlation_matrix
+
     except Exception as e:
-        # This catch-all makes the function robust against unexpected data formats or processing errors
         st.warning(f"Data analysis failed. This can happen with incomplete or corrupt data segments. Error: {e}")
         return None
+
+
 
 # --- HELPER & UI FUNCTIONS (Unchanged) ---
 def classify_stage_by_index(index):
