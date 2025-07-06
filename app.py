@@ -204,7 +204,7 @@ def perform_advanced_analysis(data):
         weights = st.session_state;
         weight_sum = weights.w_rms + weights.w_freq + weights.w_jerk
         composite_index = (
-                                  weights.w_rms * norm_rms + weights.w_freq * norm_power_ratio + weights.w_jerk * norm_jerk) / weight_sum if weight_sum > 0 else 0
+                                      weights.w_rms * norm_rms + weights.w_freq * norm_power_ratio + weights.w_jerk * norm_jerk) / weight_sum if weight_sum > 0 else 0
         f_spec, t_spec, Sxx = spectrogram(df['total_mag'], fs);
         peak_freq_idx = np.argmax(power_spectrum)
         peak_freq = xf[peak_freq_idx] if peak_freq_idx < len(xf) else 0
@@ -221,7 +221,7 @@ def perform_advanced_analysis(data):
         correlation_matrix = df[['ax1', 'ay1', 'az1']].corr()
         metrics = {"rms_tremor": rms_tremor, "stage": classify_stage_by_index(composite_index), "sampling_freq": fs,
                    "effectiveness": (1 - (
-                           np.sqrt(np.mean(df['total_mag_stable'] ** 2)) / rms_tremor)) * 100 if rms_tremor > 0 else 0,
+                               np.sqrt(np.mean(df['total_mag_stable'] ** 2)) / rms_tremor)) * 100 if rms_tremor > 0 else 0,
                    "rms_jerk": rms_jerk, "power_in_band_ratio": power_in_band_ratio_4_8 * 100,
                    "spectral_entropy": spectral_entropy_val, "composite_index": composite_index, "peak_freq": peak_freq,
                    "band_power_3_7_ratio": power_in_band_ratio_3_7 * 100, "sma": sma, "std_dev_axes": std_dev_axes,
@@ -231,7 +231,6 @@ def perform_advanced_analysis(data):
         # This catch-all makes the function robust against unexpected data formats or processing errors
         st.warning(f"Data analysis failed. This can happen with incomplete or corrupt data segments. Error: {e}")
         return None
-
 
 # --- HELPER & UI FUNCTIONS (Unchanged) ---
 def classify_stage_by_index(index):
@@ -260,102 +259,194 @@ def format_stage_with_color(stage_string):
     return f"<span style='color: #333;'>{stage_string}</span>"
 
 
-# --- HTML REPORT GENERATION FUNCTION (IMPROVED FOR CLOUD DEPLOYMENT) ---
-def generate_html_report(window_analysis, patient_details, window_str):
-    """Generates a self-contained, printable HTML report for a specific data window."""
-    df, metrics, fft_df, _, _ = window_analysis
+import base64
+from datetime import datetime
+import plotly.graph_objects as go
+import plotly.express as px
 
-    # Placeholder to return on image generation failure
+def generate_html_report(window_analysis, patient_details, window_str):
+    """Generates a modern, mobile-friendly HTML report with base64 images."""
+    import base64
+    from datetime import datetime
+    df, metrics, fft_df, _, _ = window_analysis
     FAILURE_PLACEHOLDER = "IMAGE_GENERATION_FAILED"
 
     def fig_to_base64(fig):
-        """Converts a Plotly figure to a base64 string, with a fallback for errors."""
         try:
-            # Added a timeout to prevent hanging on cloud platforms
-            img_bytes = fig.to_image(format="png", scale=2, engine="kaleido", timeout=10)
+            img_bytes = fig.to_image(format="png", scale=2)
+            if not img_bytes:
+                raise ValueError("fig.to_image() returned None")
             return base64.b64encode(img_bytes).decode()
         except Exception as e:
-            # This error will be visible in the Streamlit Cloud logs
-            print(f"CRITICAL: Kaleido failed to generate an image for the report. Error: {e}")
+            print(f"[ERROR] Kaleido rendering failed: {e}")
             return FAILURE_PLACEHOLDER
 
-    # --- Generate Figures ---
+    # --- Figures ---
     fig_gauge = go.Figure(go.Indicator(
         mode="gauge+number", value=metrics['composite_index'], number={'valueformat': '.2f'},
         domain={'x': [0, 1], 'y': [0, 1]}, title={'text': f"Severity Index ({metrics['stage']})"},
-        gauge={'axis': {'range': [0, 1]}, 'bar': {'color': "darkgray"},
-               'steps': [{'range': [0, 0.3], 'color': '#90ee90'}, {'range': [0.3, 0.5], 'color': '#ffd700'},
-                         {'range': [0.5, 0.7], 'color': '#ffa500'}, {'range': [0.7, 1], 'color': '#ff4500'}]}))
-    fig_gauge.update_layout(height=300, margin=dict(t=50, b=20))
+        gauge={
+            'axis': {'range': [0, 1]}, 'bar': {'color': "gray"},
+            'steps': [
+                {'range': [0, 0.3], 'color': '#a5d6a7'}, {'range': [0.3, 0.5], 'color': '#fff59d'},
+                {'range': [0.5, 0.7], 'color': '#ffcc80'}, {'range': [0.7, 1.0], 'color': '#ef9a9a'}
+            ]
+        }))
+    fig_gauge.update_layout(height=280, margin=dict(t=40, b=10))
     gauge_b64 = fig_to_base64(fig_gauge)
 
     fig_ts = go.Figure()
     fig_ts.add_trace(go.Scatter(x=df['time_s'], y=df['total_mag'], mode='lines', name='Raw Hand'))
     fig_ts.add_trace(go.Scatter(x=df['time_s'], y=df['total_mag_stable'], mode='lines', name='Stabilized Spoon'))
-    fig_ts.update_layout(xaxis_title="Time (s)", yaxis_title="Acceleration Magnitude", height=350,
-                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+    fig_ts.update_layout(xaxis_title="Time (s)", yaxis_title="Acceleration Magnitude", height=350)
     ts_b64 = fig_to_base64(fig_ts)
 
-    fig_fft = px.bar(fft_df, x='Frequency (Hz)', y='Power', log_y=True, title="Frequency Spectrum (FFT)")
+    fig_fft = px.bar(fft_df, x='Frequency (Hz)', y='Power', log_y=True, title="Frequency Spectrum")
     fig_fft.add_vrect(x0=3, x1=7, fillcolor="red", opacity=0.2, line_width=0, annotation_text="PD Band")
-    fig_fft.update_xaxes(range=[0, 25]);
+    fig_fft.update_xaxes(range=[0, 25])
     fig_fft.update_layout(height=350)
     fft_b64 = fig_to_base64(fig_fft)
 
-    # --- Helper to create image tag or failure message ---
-    def create_image_html(base64_string, alt_text):
-        if base64_string == FAILURE_PLACEHOLDER:
-            return f'<p style="color:red; border: 1px solid red; padding: 10px; background-color: #fff0f0;"><b>Error:</b> The "{alt_text}" graph could not be rendered. This is likely due to a missing system dependency on the server. Please add required packages to `packages.txt`.</p>'
-        return f'<img src="data:image/png;base64,{base64_string}" alt="{alt_text}">'
+    def img_or_error(b64, label):
+        if b64 == FAILURE_PLACEHOLDER:
+            return f'<div class="error"><strong>⚠ Failed to load "{label}" chart.</strong></div>'
+        return f'<img src="data:image/png;base64,{b64}" alt="{label}">'
 
-    # --- Create HTML content with fallback messages ---
-    gauge_html = create_image_html(gauge_b64, "Severity Gauge")
-    ts_html = create_image_html(ts_b64, "Movement Over Time")
-    fft_html = create_image_html(fft_b64, "Frequency Spectrum")
+    summary = (
+        f"<b>{metrics['stage']}</b> stage tremor detected in <b>{window_str}</b> window. "
+        f"RMS: <b>{metrics['rms_tremor']:.0f}</b>, Peak Freq: <b>{metrics['peak_freq']:.2f} Hz</b>, "
+        f"Stabilizer Efficiency: <b>{metrics['effectiveness']:.1f}%</b>."
+    )
 
-    summary_text = f"Analysis of the <b>{window_str}</b> window indicates a <b>'{metrics['stage']}'</b> tremor severity, with an intensity (RMS Power) of <b>{metrics['rms_tremor']:.0f}</b> and a dominant frequency of <b>{metrics['peak_freq']:.2f} Hz</b>. The stabilizer effectiveness during this period was <b>{metrics['effectiveness']:.1f}%</b>."
-    key_metrics_data = [
-        ("RMS Power (Intensity)", f"{metrics['rms_tremor']:.0f}"), ("Peak Frequency", f"{metrics['peak_freq']:.2f} Hz"),
-        ("Power in 3-7Hz Band", f"{metrics['band_power_3_7_ratio']:.1f}%"),
-        ("RMS of Jerk (Roughness)", f"{metrics['rms_jerk'] / 1000:.1f}k"),
-        ("Stabilizer Effectiveness", f"{metrics['effectiveness']:.1f}%"),
-        ("Spectral Entropy", f"{metrics['spectral_entropy']:.2f}"),
-    ]
-    metrics_rows_html = "".join([f"<tr><td>{label}</td><td>{value}</td></tr>" for label, value in key_metrics_data])
+    metric_table = "".join([
+        f"<tr><td>{label}</td><td>{val}</td></tr>" for label, val in [
+            ("RMS Power", f"{metrics['rms_tremor']:.0f}"),
+            ("Peak Frequency", f"{metrics['peak_freq']:.2f} Hz"),
+            ("Power in 3–7 Hz", f"{metrics['band_power_3_7_ratio']:.1f}%"),
+            ("RMS Jerk", f"{metrics['rms_jerk'] / 1000:.1f}k"),
+            ("Effectiveness", f"{metrics['effectiveness']:.1f}%"),
+            ("Spectral Entropy", f"{metrics['spectral_entropy']:.2f}")
+        ]
+    ])
 
-    html_template = f"""
-    <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Movement Analysis Report: {window_str}</title>
-    <style>
-        body{{font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;margin:0 auto;padding:2rem;max-width:1024px;color:#333;background-color:#fafafa;}}
-        .container{{border:1px solid #ddd;padding:2rem;background-color:#fff;box-shadow:0 4px 12px rgba(0,0,0,0.05);border-radius:8px;}}
-        h1,h2,h3{{color:#111;border-bottom:2px solid #eee;padding-bottom:10px;margin-top:30px;}}
-        .info-grid{{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:2rem;background:#f8f8f8;padding:1rem;border-radius:5px;}}
-        .info-grid p{{margin:0;padding:5px;}} .info-grid .highlight{{font-weight:bold;color:#4a90e2;}}
-        .summary{{background-color:#f0f5ff;border-left:5px solid #4a90e2;padding:15px;margin:20px 0;line-height:1.6;}}
-        table{{width:100%;border-collapse:collapse;margin-top:20px;}} th,td{{padding:12px;text-align:left;border-bottom:1px solid #ddd;}}
-        th{{background-color:#f8f8f8;}} tr:hover{{background-color:#f5f5f5;}}
-        .chart-static img{{width:100%;max-width:800px;height:auto;border:1px solid #eee;display:block;margin:auto;}}
-        .footer{{text-align:center;margin-top:40px;font-size:0.8em;color:#888;}}
-        @media print{{body{{background-color:#fff;padding:0;margin:1cm;}} .container{{box-shadow:none;border:none;padding:0;}}
-        h1,h2,h3{{page-break-after:avoid;}} .chart-static,table{{page-break-inside:avoid;}} .no-print{{display:none;}}}}
-    </style></head><body><div class="container">
-        <h1>Parkinson's Movement Analysis Report</h1>
-        <div class="info-grid">
-            <p><strong>Patient ID:</strong> {patient_details.get('patient_id', 'N/A')}</p>
-            <p><strong>Recording Date:</strong> {patient_details.get('timestamp', 'N/A')}</p>
-            <p class="highlight"><strong>Analysis for Window:</strong> {window_str}</p>
-            <p><strong>Report Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-        </div>
-        <h2>1. Overall Assessment</h2><div class="summary"><p>{summary_text}</p></div>
-        <h3>Severity Index</h3><div class="chart-static">{gauge_html}</div>
-        <h2>2. Key Clinical Metrics for this Window</h2><table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>{metrics_rows_html}</tbody></table>
-        <h2>3. Visual Analysis for this Window</h2>
-        <h3>Movement Over Time</h3><div class="chart-static">{ts_html}</div>
-        <h3>Frequency Spectrum</h3><div class="chart-static">{fft_html}</div>
-        <div class="footer"><p>This report was automatically generated. Please consult a medical professional for diagnosis.</p></div>
-    </div></body></html>
-    """
-    return html_template
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    html = f"""
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>Report: {window_str}</title>
+<style>
+  body {{
+    font-family: 'Segoe UI', Roboto, sans-serif;
+    background: #f2f4f7;
+    margin: 0; padding: 0;
+  }}
+  .container {{
+    max-width: 960px;
+    margin: auto;
+    padding: 2rem;
+  }}
+  .card {{
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 6px 12px rgba(0,0,0,0.06);
+    padding: 1.5rem 2rem;
+    margin-bottom: 2rem;
+  }}
+  h1, h2 {{
+    color: #333;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 0.5rem;
+  }}
+  .info {{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }}
+  .info div {{
+    flex: 1;
+    min-width: 200px;
+    background: #f9fafb;
+    padding: 0.8rem 1rem;
+    border-radius: 8px;
+    border-left: 4px solid #4a90e2;
+  }}
+  table {{
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+  }}
+  td {{
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+  }}
+  tr:hover {{ background: #f7f7f7; }}
+  img {{
+    width: 100%;
+    max-width: 800px;
+    margin-top: 1rem;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+  }}
+  .footer {{
+    text-align: center;
+    font-size: 0.9em;
+    color: #999;
+    margin-top: 3rem;
+  }}
+  .error {{
+    color: red;
+    background: #fff4f4;
+    border: 1px solid red;
+    padding: 10px;
+    margin-top: 1rem;
+    border-radius: 6px;
+  }}
+</style></head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>Parkinson's Tremor Report</h1>
+      <div class="info">
+        <div><strong>Patient ID:</strong><br>{patient_details.get('patient_id', 'N/A')}</div>
+        <div><strong>Date:</strong><br>{patient_details.get('timestamp', 'N/A')}</div>
+        <div><strong>Window:</strong><br>{window_str}</div>
+        <div><strong>Generated:</strong><br>{now}</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>1. Summary</h2>
+      <p>{summary}</p>
+    </div>
+
+    <div class="card">
+      <h2>2. Severity Gauge</h2>
+      {img_or_error(gauge_b64, "Severity Gauge")}
+    </div>
+
+    <div class="card">
+      <h2>3. Clinical Metrics</h2>
+      <table>{metric_table}</table>
+    </div>
+
+    <div class="card">
+      <h2>4. Time-Series Movement</h2>
+      {img_or_error(ts_b64, "Time-Series")}
+    </div>
+
+    <div class="card">
+      <h2>5. Frequency Spectrum</h2>
+      {img_or_error(fft_b64, "Frequency Spectrum")}
+    </div>
+
+    <div class="footer">
+      This report was auto-generated for research/clinical review. Consult a specialist for diagnosis.
+    </div>
+  </div>
+</body>
+</html>
+"""
+    return html
+
 # --- MAIN DASHBOARD DISPLAY (Unchanged) ---
 def display_dashboard(df, metrics, fft_df, spec_data, corr_matrix, display_info, current_window=None):
     st.title("Advanced Parkinson's Movement Analyzer")
@@ -404,10 +495,9 @@ def display_dashboard(df, metrics, fft_df, spec_data, corr_matrix, display_info,
          "Component Details", "Raw Data"])
 
     with tabs[0]:
-        # FIX: Corrected typo in subheader
-        st.subheader(f"Hand Movements vs Stabilizer: {current_window or 'Live Data'}")
+        st.subheader(f"Hand Movments vs Stabalizer: {current_window or 'Live Data'}")
         st.info(
-            "This chart compares the RAW hand tremor with the movement of the Stabilized spoon. Effective stabilization should show a significantly smaller amplitude for the cyan line (Spoon).")
+            "This chart compares the RAW hand tremor with the movement of the Stabilized spoon . Effective stabilization should show a significantly smaller amplitude for the cyan line (Spoon).")
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=df['time_s'], y=df['total_mag'], mode='lines', name='Raw Hand (Sensor 1)',
                                  line=dict(color='orange')))
@@ -529,7 +619,7 @@ def display_dashboard(df, metrics, fft_df, spec_data, corr_matrix, display_info,
         st.dataframe(df[display_cols].style.format("{:.3f}"), use_container_width=True)
 
 
-# --- SIDEBAR & MAIN LOGIC ---
+# --- SIDEBAR & MAIN LOGIC (with button emojis removed) ---
 placeholder = st.empty()
 analysis_result_for_display = None
 
@@ -566,17 +656,11 @@ with st.sidebar:
         st.divider()
         st.header("Connection Health")
         total_req = st.session_state.connection_successes + st.session_state.connection_failures
-        # FIX: Correctly calculate and display packet loss
-        if total_req > 0:
-            success_rate = (st.session_state.connection_successes / total_req) * 100
-            packet_loss_rate = 100 - success_rate
-        else:
-            packet_loss_rate = 0.0
-
+        success_rate = 100-((st.session_state.connection_successes / total_req * 100) if total_req > 0 else 100)
         st.metric("Last Fetch", st.session_state.last_conn_status)
         st.metric("Latency", f"{st.session_state.last_latency:.2f} s")
         st.metric("Data Rate", f"{st.session_state.last_data_rate:.1f} KB/s")
-        st.progress(int(packet_loss_rate), text=f"Packet Loss: {packet_loss_rate:.1f}%")
+        st.progress(int(success_rate), text=f"Packet Loss : {success_rate:.1f}%")
 
     else:  # Playback Mode
         st.header("Playback Controls");
@@ -602,9 +686,8 @@ with st.sidebar:
                     recording_data = get_specific_recording(st.session_state.selected_recording_id, FIREBASE_URL,
                                                             DB_SECRET)
                     if recording_data and 'data' in recording_data:
-                        analysis_results = perform_advanced_analysis(recording_data['data'])
-                        if analysis_results is not None:
-                            df, metrics, _, _, _ = analysis_results
+                        df, metrics, _, _, _ = perform_advanced_analysis(recording_data['data'])
+                        if df is not None:
                             st.session_state.full_playback_df = df
                             st.session_state.total_duration = metrics.get('duration', 0);
                             st.session_state.current_window_start = 0.0
@@ -622,7 +705,7 @@ with st.sidebar:
                 end_time = start_time + 2.0
                 window_df_raw = st.session_state.full_playback_df[
                     (st.session_state.full_playback_df['time_s'] >= start_time) & (
-                            st.session_state.full_playback_df['time_s'] < end_time)]
+                                st.session_state.full_playback_df['time_s'] < end_time)]
                 window_data_as_list = window_df_raw.to_dict('records')
                 st.session_state.current_window_analysis = perform_advanced_analysis(window_data_as_list)
                 analysis_result_for_display = st.session_state.current_window_analysis
@@ -631,12 +714,10 @@ with st.sidebar:
                 st.write(f"**Viewing:** `{start_time:.1f}s - {end_time:.1f}s` of `{total_duration:.1f}s` total.")
                 if total_duration > 2.0:
                     col1, col2 = st.columns(2)
-                    # FIX: Cast numpy.bool_ to Python bool to prevent TypeError
-                    if col1.button("Previous Window", use_container_width=True, disabled=bool(start_time <= 0)):
+                    if col1.button("Previous Window", use_container_width=True, disabled=(start_time <= 0)):
                         st.session_state.current_window_start = max(0.0, st.session_state.current_window_start - 2.0);
                         st.rerun()
-                    # FIX: Cast numpy.bool_ to Python bool to prevent TypeError
-                    if col2.button("Next Window", use_container_width=True, disabled=bool(end_time >= total_duration)):
+                    if col2.button("Next Window", use_container_width=True, disabled=(end_time >= total_duration)):
                         st.session_state.current_window_start = min(total_duration - 2.0,
                                                                     st.session_state.current_window_start + 2.0);
                         st.rerun()
@@ -752,8 +833,6 @@ st.markdown("""
         <b>Supervisor:</b> Mr. Nuwan Attanayake
     </div>
 """, unsafe_allow_html=True)
-
-#newer
 
 # --- Auto-Refresh Logic ---
 if st.session_state.is_running and st.session_state.mode == 'Live':
