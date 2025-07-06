@@ -258,168 +258,150 @@ def format_stage_with_color(stage_string):
         if stage in stage_string: return f"<span style='color: {color};'>{stage_string}</span>"
     return f"<span style='color: #333;'>{stage_string}</span>"
 
-# --- MODIFIED REPORT GENERATION FUNCTION ---
 def generate_html_report(window_analysis, patient_details, window_str):
-    """
-    Generates a modern, mobile-friendly HTML report with base64 images.
-    This version is robust and will not crash if kaleido fails to render an image.
-    """
     df, metrics, fft_df, _, _ = window_analysis
-    FAILURE_PLACEHOLDER = "IMAGE_GENERATION_FAILED"
 
-    def fig_to_base64(fig):
-        """Converts a Plotly figure to a base64 string, handling errors."""
-        try:
-            img_bytes = fig.to_image(format="png", scale=2) # High-res
-            if not img_bytes:
-                raise ValueError("fig.to_image() returned empty bytes.")
-            return base64.b64encode(img_bytes).decode()
-        except Exception as e:
-            # Log the error to the Streamlit console for debugging
-            print(f"[REPORTING ERROR] Kaleido/Plotly image rendering failed: {e}")
-            return FAILURE_PLACEHOLDER
+    # --- 1. Main Prediction ---
+    # Determine the predicted level and an associated color for styling
+    stage = metrics['stage']
+    if "Mild" in stage:
+        prediction_color = "#28a745" # Green
+        prediction_advice = "The tremor is minimal and may not significantly interfere with daily activities. Monitor for any changes."
+    elif "Moderate" in stage:
+        prediction_color = "#ffc107" # Yellow/Orange
+        prediction_advice = "The tremor is noticeable and may cause some difficulty with tasks. The stabilizer shows significant effectiveness."
+    elif "Severe" in stage:
+        prediction_color = "#dc3545" # Red
+        prediction_advice = "The tremor is prominent and likely interferes with daily living. Device intervention is highly beneficial."
+    else: # Critical
+        prediction_color = "#8B0000" # Dark Red
+        prediction_advice = "The tremor is very severe. The data indicates a critical level of motor symptoms requiring immediate attention."
 
-    # --- Create all figures first ---
-    # 1. Gauge Chart
-    fig_gauge = go.Figure(go.Indicator(
-        mode="gauge+number", value=metrics['composite_index'], number={'valueformat': '.2f'},
-        domain={'x': [0, 1], 'y': [0, 1]}, title={'text': f"Severity Index ({metrics['stage']})"},
-        gauge={
-            'axis': {'range': [0, 1]}, 'bar': {'color': "#607d8b"},
-            'steps': [
-                {'range': [0, st.session_state.stage1_idx], 'color': '#a5d6a7'},
-                {'range': [st.session_state.stage1_idx, st.session_state.stage2_idx], 'color': '#fff59d'},
-                {'range': [st.session_state.stage2_idx, st.session_state.stage3_idx], 'color': '#ffcc80'},
-                {'range': [st.session_state.stage3_idx, 1.0], 'color': '#ef9a9a'}
-            ]
-        }))
-    fig_gauge.update_layout(height=280, margin=dict(t=50, b=20, l=20, r=20), font_family="sans-serif")
+    # --- 2. Detailed Observations (Text-based analysis) ---
+    # Observation on Intensity and Effectiveness
+    stabilized_rms = np.sqrt(np.mean(df['total_mag_stable'] ** 2)) if 'total_mag_stable' in df else 0
+    intensity_obs = (f"The raw hand tremor registered a Root Mean Square (RMS) power of <strong>{metrics['rms_tremor']:.0f}</strong>. "
+                     f"The stabilization device successfully reduced this to an RMS of <strong>{stabilized_rms:.0f}</strong>, "
+                     f"resulting in a tremor reduction effectiveness of <strong>{metrics['effectiveness']:.1f}%</strong>.")
 
-    # 2. Time Series Chart
-    fig_ts = go.Figure()
-    fig_ts.add_trace(go.Scatter(x=df['time_s'], y=df['total_mag'], mode='lines', name='Raw Hand Tremor', line=dict(color="#ffa726")))
-    fig_ts.add_trace(go.Scatter(x=df['time_s'], y=df['total_mag_stable'], mode='lines', name='Stabilized Movement', line=dict(color="#42a5f5")))
-    fig_ts.update_layout(
-        title="Movement Over Time",
-        xaxis_title="Time (seconds)",
-        yaxis_title="Acceleration Magnitude",
-        height=350, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        font_family="sans-serif"
-    )
+    # Observation on Frequency
+    frequency_obs = (f"Frequency analysis identified a dominant tremor peak at <strong>{metrics['peak_freq']:.2f} Hz</strong>. "
+                     f"A significant <strong>{metrics['band_power_3_7_ratio']:.1f}%</strong> of the total movement energy was found "
+                     f"within the 3-7 Hz range, which is a classic biomarker for Parkinsonian tremor.")
 
-    # 3. FFT Chart
-    fig_fft = px.bar(fft_df, x='Frequency (Hz)', y='Power', log_y=True)
-    fig_fft.add_vrect(x0=3, x1=7, fillcolor="#ef5350", opacity=0.2, line_width=0, annotation_text="PD Band (3-7Hz)")
-    fig_fft.update_xaxes(range=[0, 25])
-    fig_fft.update_layout(
-        title="Frequency Power Spectrum",
-        height=350,
-        font_family="sans-serif"
-    )
+    # Observation on Movement Quality
+    quality_obs = (f"The movement's jerkiness, a measure of smoothness, was calculated at <strong>{metrics['rms_jerk']/1000:.1f}k</strong>. "
+                   f"The spectral entropy was <strong>{metrics['spectral_entropy']:.2f}</strong>, indicating a tremor with "
+                   f"{'a highly regular and predictable pattern.' if metrics['spectral_entropy'] < 3.5 else 'some irregularity and randomness.'}")
 
-    # --- Convert figures to base64 using the robust wrapper ---
-    gauge_b64 = fig_to_base64(fig_gauge)
-    ts_b64 = fig_to_base64(fig_ts)
-    fft_b64 = fig_to_base64(fig_fft)
-
-    def img_or_error(b64_string, chart_name):
-        """Returns an <img> tag or a formatted error message."""
-        if b64_string == FAILURE_PLACEHOLDER:
-            return f'<div class="error"><strong>⚠ Chart Generation Failed for "{chart_name}"</strong><br>This can occur due to server resource limitations. The numerical data in this report remains valid.</div>'
-        return f'<img src="data:image/png;base64,{b64_string}" alt="{chart_name}">'
-
-    # --- Prepare text content for the report ---
-    summary = (
-        f"This report details a <strong>{metrics['stage']}</strong> stage tremor, analyzed over the <strong>{window_str}</strong> window. "
-        f"The tremor's root-mean-square (RMS) power was <strong>{metrics['rms_tremor']:.0f}</strong>, with a dominant peak frequency at <strong>{metrics['peak_freq']:.2f} Hz</strong>. "
-        f"The stabilization device demonstrated an efficiency of <strong>{metrics['effectiveness']:.1f}%</strong> in reducing the tremor's amplitude."
-    )
-
+    # --- 3. Key Metrics Table ---
+    # Create rows for a clean HTML table
     metric_table_rows = "".join([
         f"<tr><td>{label}</td><td>{val}</td></tr>" for label, val in [
             ("Composite Severity Index", f"{metrics['composite_index']:.3f}"),
-            ("RMS Tremor Power", f"{metrics['rms_tremor']:.0f}"),
-            ("Peak Frequency", f"{metrics['peak_freq']:.2f} Hz"),
-            ("Power in 3–7 Hz Band", f"{metrics['band_power_3_7_ratio']:.1f}%"),
-            ("RMS of Jerk (Smoothness)", f"{metrics['rms_jerk'] / 1000:.1f}k"),
-            ("Stabilizer Effectiveness", f"{metrics['effectiveness']:.1f}%"),
-            ("Spectral Entropy (Randomness)", f"{metrics['spectral_entropy']:.2f}")
+            ("Peak Tremor Frequency", f"{metrics['peak_freq']:.2f} Hz"),
+            ("Power in Parkinson's Band (3-7Hz)", f"{metrics['band_power_3_7_ratio']:.1f} %"),
+            ("Overall Tremor Intensity (RMS)", f"{metrics['rms_tremor']:.0f}"),
+            ("Stabilizer Effectiveness", f"{metrics['effectiveness']:.1f} %"),
+            ("Movement Jerkiness (RMS Jerk)", f"{metrics['rms_jerk']/1000:.1f} k"),
+            ("Movement Randomness (Entropy)", f"{metrics['spectral_entropy']:.2f}"),
+            ("Crest Factor", f"{metrics['crest_factor']:.2f}"),
+            ("Signal Magnitude Area", f"{metrics['sma']:.1f}"),
         ]
     ])
 
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    # --- Assemble the final HTML string ---
+    # --- 4. Assemble the final HTML string ---
     html = f"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Parkinson's Tremor Report: {patient_details.get('patient_id', 'N/A')}</title>
+    <title>Tremor Analysis Report: {patient_details.get('patient_id', 'N/A')}</title>
 <style>
   body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f8f9fa; color: #343a40; }}
   .container {{ max-width: 800px; margin: 20px auto; padding: 20px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border-radius: 12px; }}
-  .header {{ text-align: center; border-bottom: 1px solid #dee2e6; padding-bottom: 20px; margin-bottom: 20px; }}
-  .header h1 {{ margin: 0; color: #212529; font-size: 28px; }}
+  .header {{ text-align: left; border-bottom: 1px solid #dee2e6; padding-bottom: 15px; margin-bottom: 25px; }}
+  .header h1 {{ margin: 0; color: #212529; font-size: 26px; }}
   .header p {{ margin: 5px 0 0; color: #6c757d; font-size: 14px; }}
   .card {{ background: #fff; border: 1px solid #e9ecef; border-radius: 8px; padding: 20px; margin-bottom: 20px; }}
-  h2 {{ font-size: 22px; color: #495057; border-bottom: 2px solid #0d6efd; padding-bottom: 8px; margin-top: 0; }}
-  .info-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 20px; }}
-  .info-item {{ background-color: #f8f9fa; padding: 10px 15px; border-radius: 6px; }}
-  .info-item strong {{ color: #495057; font-size: 12px; text-transform: uppercase; display: block; margin-bottom: 4px;}}
-  table {{ width: 100%; border-collapse: collapse; }}
-  th, td {{ padding: 12px 15px; text-align: left; border-bottom: 1px solid #dee2e6; }}
-  tr:nth-child(even) {{ background-color: #f8f9fa; }}
-  td:last-child {{ font-weight: 600; text-align: right; }}
-  img {{ max-width: 100%; height: auto; border-radius: 8px; margin-top: 10px; display: block; }}
-  .summary {{ font-size: 16px; line-height: 1.6; background-color: #e7f5ff; border-left: 5px solid #0d6efd; padding: 15px 20px; margin: 20px 0; border-radius: 0 8px 8px 0; }}
+  h2 {{ font-size: 20px; color: #0056b3; border-bottom: 2px solid #0056b3; padding-bottom: 8px; margin-top: 0; }}
+  h3 {{ font-size: 16px; color: #495057; margin-top: 1.5em; margin-bottom: 0.5em; }}
+  .prediction-box {{
+    padding: 20px;
+    border-radius: 8px;
+    text-align: center;
+    color: white;
+    background-color: {prediction_color};
+    border: 2px solid rgba(0,0,0,0.2);
+  }}
+  .prediction-box .stage {{ font-size: 28px; font-weight: 700; margin: 0; }}
+  .prediction-box .score {{ font-size: 16px; opacity: 0.9; margin: 4px 0 10px 0; }}
+  .prediction-box .advice {{ font-size: 14px; font-style: italic; opacity: 0.95; max-width: 90%; margin: auto; }}
+
+  table {{ width: 100%; border-collapse: collapse; margin-top: 15px; }}
+  td {{ padding: 12px 15px; text-align: left; border-bottom: 1px solid #dee2e6; }}
+  tr:last-child td {{ border-bottom: none; }}
+  td:first-child {{ color: #495057; }}
+  td:last-child {{ font-weight: 600; text-align: right; font-family: 'Menlo', 'Consolas', monospace; }}
+
+  .observation {{
+    font-size: 15px;
+    line-height: 1.6;
+    background-color: #f8f9fa;
+    border-left: 4px solid #ced4da;
+    padding: 10px 15px;
+    margin-top: 10px;
+    border-radius: 0 4px 4px 0;
+  }}
   .footer {{ text-align: center; font-size: 12px; color: #6c757d; margin-top: 30px; padding-top: 15px; border-top: 1px solid #dee2e6; }}
-  .error {{ color: #b33e3e; background-color: #fceeee; border: 1px solid #f1c1c1; padding: 15px; border-radius: 6px; margin-top: 1rem; font-family: monospace; }}
 </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
-        <h1>Parkinson's Movement Analysis Report</h1>
-        <p>A quantitative summary of tremor characteristics</p>
+        <h1>Movement Analysis Report</h1>
+        <p>Patient: {patient_details.get('patient_id', 'N/A')} | Date: {patient_details.get('timestamp', 'N/A')} | Window: {window_str}</p>
     </div>
-    <div class="info-grid">
-      <div class="info-item"><strong>Patient ID</strong> {patient_details.get('patient_id', 'N/A')}</div>
-      <div class="info-item"><strong>Recording Date</strong> {patient_details.get('timestamp', 'N/A')}</div>
-      <div class="info-item"><strong>Analysis Window</strong> {window_str}</div>
-      <div class="info-item"><strong>Report Generated</strong> {now}</div>
-    </div>
+
     <div class="card">
-        <h2>Executive Summary</h2>
-        <div class="summary">{summary}</div>
+      <h2>Tremor Level Predicted</h2>
+      <div class="prediction-box">
+          <p class="stage">{stage}</p>
+          <p class="score">Composite Index: {metrics['composite_index']:.3f}</p>
+          <p class="advice">{prediction_advice}</p>
+      </div>
     </div>
+
     <div class="card">
-        <h2>Severity Gauge</h2>
-        {img_or_error(gauge_b64, "Severity Gauge")}
+        <h2>Detailed Observations</h2>
+        <h3>Tremor Intensity & Device Effectiveness</h3>
+        <p class="observation">{intensity_obs}</p>
+
+        <h3>Frequency Characteristics</h3>
+        <p class="observation">{frequency_obs}</p>
+
+        <h3>Movement Quality & Smoothness</h3>
+        <p class="observation">{quality_obs}</p>
     </div>
+
     <div class="card">
-        <h2>Key Clinical Metrics</h2>
-        <table>{metric_table_rows}</table>
+        <h2>All Numerical Data</h2>
+        <table>
+            {metric_table_rows}
+        </table>
     </div>
-    <div class="card">
-        <h2>Time-Series Analysis</h2>
-        {img_or_error(ts_b64, "Time-Series Chart")}
-    </div>
-    <div class="card">
-        <h2>Frequency Domain Analysis</h2>
-        {img_or_error(fft_b64, "Frequency Spectrum Chart")}
-    </div>
+
     <div class="footer">
-      This report is auto-generated for informational and research purposes only. It is not a substitute for a professional medical diagnosis.
+      Generated on: {now}. This is an auto-generated report for clinical review and research purposes.
     </div>
   </div>
 </body>
 </html>
 """
     return html
-
-
 # --- MAIN DASHBOARD DISPLAY (Unchanged) ---
 def display_dashboard(df, metrics, fft_df, spec_data, corr_matrix, display_info, current_window=None):
     st.title("Advanced Parkinson's Movement Analyzer")
