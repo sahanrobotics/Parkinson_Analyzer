@@ -259,17 +259,32 @@ def format_stage_with_color(stage_string):
     return f"<span style='color: #333;'>{stage_string}</span>"
 
 
+import numpy as np
+import pandas as pd
+from datetime import datetime
 
 
 def generate_html_report(window_analysis, patient_details, window_str):
     """
-    Generates a complete, visually rich, and data-dense report.
+    Generates a complete, visually rich, and data-dense report with a modern design.
     It combines high-quality SVG graphs with detailed textual analysis and numerical tables,
     remaining 100% reliable with no external dependencies.
     """
     df, metrics, fft_df, _, _ = window_analysis
 
-    # --- PART 1: SVG GRAPH GENERATION ---
+    # --- PART 1: SVG ICONS AND STYLES ---
+
+    # Simple, modern SVG icons embedded for use in headers.
+    svg_icons = {
+        "dashboard": '<svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M4 13h6c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v8c0 .55.45 1 1 1zm0 8h6c.55 0 1-.45 1-1v-4c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v4c0 .55.45 1 1 1zm10 0h6c.55 0 1-.45 1-1v-8c0-.55-.45-1-1-1h-6c-.55 0-1 .45-1 1v8c0 .55.45 1 1 1zM13 4v4c0 .55.45 1 1 1h6c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1h-6c-.55 0-1 .45-1 1z"/></svg>',
+        "chart_line": '<svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z"/></svg>',
+        "chart_bar": '<svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M5 9.2h3V19H5zM10.6 5h3v14h-3zm5.6 8h3v6h-3z"/></svg>',
+        "list_check": '<svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zm0-8h14V7H7v2z"/></svg>',
+        "table": '<svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM8 17H5v-3h3v3zm0-5H5V9h3v3zm0-5H5V4h3v3zm5 10h-3v-3h3v3zm0-5h-3V9h3v3zm0-5h-3V4h3v3zm5 10h-3v-3h3v3zm0-5h-3V9h3v3zm0-5h-3V4h3v3z"/></svg>',
+        "zap": '<svg class="icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>',
+        "activity": '<svg class="icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h.007v.007H3.75V12zm4.125 0h.007v.007h-.007V12zm4.125 0h.007v.007h-.007V12zm4.125 0h.007v.007h-.007V12zm4.125 0h.007v.007h-.007V12z" /></svg>',
+        "sparkles": '<svg class="icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM18 13.5l.375 1.5.375-1.5a2.625 2.625 0 00-1.682-1.682L15 11.25l1.5.375a2.625 2.625 0 001.682-1.682L18 8.25l-.375 1.5-.375-1.5a2.625 2.625 0 00-1.682 1.682L13.5 12l1.5.375a2.625 2.625 0 001.682 1.682z" /></svg>'
+    }
 
     # --- SVG HELPER 1: MOVEMENT (TIME-SERIES) CHART ---
     def create_svg_movement_chart(df):
@@ -278,16 +293,22 @@ def generate_html_report(window_analysis, patient_details, window_str):
             step = len(data_points) // 400
             data_points = data_points.iloc[::step]
 
-        w, h, pad_t, pad_b, pad_l, pad_r = 700, 250, 20, 30, 40, 20
+        w, h, pad_t, pad_b, pad_l, pad_r = 800, 250, 20, 40, 50, 20
         chart_w, chart_h = w - pad_l - pad_r, h - pad_t - pad_b
         max_time = data_points['time_s'].max() or 1
-        max_accel = data_points['total_mag'].max() * 1.1 or 1
+        max_accel = (data_points['total_mag'].max() or 1) * 1.1
 
-        points = " ".join([
-            f"{(row['time_s'] / max_time) * chart_w + pad_l:.2f},"
-            f"{pad_t + chart_h - (row['total_mag'] / max_accel) * chart_h:.2f}"
+        points_list = [
+            ((row['time_s'] / max_time) * chart_w + pad_l,
+             pad_t + chart_h - (row['total_mag'] / max_accel) * chart_h)
             for _, row in data_points.iterrows()
-        ])
+        ]
+        polyline_points = " ".join([f"{p[0]:.2f},{p[1]:.2f}" for p in points_list])
+
+        area_path = "M" + polyline_points
+        if points_list:
+            area_path += f" L{points_list[-1][0]:.2f},{h - pad_b} L{points_list[0][0]:.2f},{h - pad_b} Z"
+
         y_grid_lines = ""
         for i in range(5):
             y_pos = pad_t + (chart_h / 4) * i
@@ -295,11 +316,26 @@ def generate_html_report(window_analysis, patient_details, window_str):
             y_grid_lines += f'<line x1="{pad_l}" y1="{y_pos}" x2="{pad_l + chart_w}" y2="{y_pos}" class="grid-line" />'
             y_grid_lines += f'<text x="{pad_l - 8}" y="{y_pos + 4}" class="axis-label y-label">{val:.0f}</text>'
 
+        x_labels = ""
+        for i in range(5):
+            x_pos = pad_l + (chart_w / 4) * i
+            val = max_time * (i / 4)
+            x_labels += f'<text x="{x_pos}" y="{h - pad_b + 18}" class="axis-label x-label">{val:.1f}s</text>'
+
         return f"""
         <svg width="100%" viewBox="0 0 {w} {h}" class="chart">
+            <defs>
+                <linearGradient id="movement-gradient" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stop-color="var(--primary-color)" stop-opacity="0.2"/>
+                    <stop offset="100%" stop-color="var(--primary-color)" stop-opacity="0"/>
+                </linearGradient>
+            </defs>
             {y_grid_lines}
-            <polyline points="{points}" class="line-movement" />
-            <text x="{w / 2}" y="{h - 5}" class="axis-label title-label">Time (seconds)</text>
+            <path d="{area_path}" class="area-movement" />
+            <polyline points="{polyline_points}" class="line-movement" />
+            <line x1="{pad_l}" y1="{h - pad_b}" x2="{w - pad_r}" y2="{h - pad_b}" class="axis-line" />
+            {x_labels}
+            <text x="{w / 2}" y="{h - 5}" class="axis-label title-label">Time</text>
             <text transform="translate(15, {h / 2}) rotate(-90)" class="axis-label title-label">Acceleration</text>
         </svg>
         """
@@ -312,7 +348,7 @@ def generate_html_report(window_analysis, patient_details, window_str):
         fft_filt['log_power'] = np.log1p(fft_filt['Power'])
         max_log_power = fft_filt['log_power'].max() or 1
 
-        w, h, pad_t, pad_b, pad_l, pad_r = 700, 250, 20, 30, 40, 20
+        w, h, pad_t, pad_b, pad_l, pad_r = 800, 250, 20, 40, 50, 20
         chart_w, chart_h = w - pad_l - pad_r, h - pad_t - pad_b
         max_freq = 25
 
@@ -320,61 +356,71 @@ def generate_html_report(window_analysis, patient_details, window_str):
         band_width = ((7 - 3) / max_freq) * chart_w
         pd_band_rect = f'<rect x="{band_x_start}" y="{pad_t}" width="{band_width}" height="{chart_h}" class="pd-band" />'
 
+        bar_width = (chart_w / max_freq) * 0.7
         bars = "".join([
-            f'<rect x="{pad_l + (row["Frequency (Hz)"] / max_freq) * chart_w - 1:.2f}" '
+            f'<rect x="{pad_l + (row["Frequency (Hz)"] / max_freq) * chart_w - bar_width / 2:.2f}" '
             f'y="{pad_t + chart_h - (row["log_power"] / max_log_power) * chart_h:.2f}" '
-            f'width="3" height="{(row["log_power"] / max_log_power) * chart_h:.2f}" class="bar" />'
+            f'width="{bar_width}" height="{(row["log_power"] / max_log_power) * chart_h:.2f}" class="bar" rx="1"/>'
             for _, row in fft_filt.iterrows()
         ])
+
         x_labels = ""
         for freq_label in [5, 10, 15, 20, 25]:
             x_pos = pad_l + (freq_label / max_freq) * chart_w
-            x_labels += f'<text x="{x_pos}" y="{h - 10}" class="axis-label x-label">{freq_label}</text>'
+            x_labels += f'<text x="{x_pos}" y="{h - pad_b + 18}" class="axis-label x-label">{freq_label} Hz</text>'
 
         return f"""
         <svg width="100%" viewBox="0 0 {w} {h}" class="chart">
             {pd_band_rect}
-            <line x1="{pad_l}" y1="{pad_t}" x2="{pad_l}" y2="{pad_t + chart_h}" class="axis-line" />
-            <line x1="{pad_l}" y1="{pad_t + chart_h}" x2="{pad_l + chart_w}" y2="{pad_t + chart_h}" class="axis-line" />
+            <line x1="{pad_l}" y1="{h - pad_b}" x2="{w - pad_r}" y2="{h - pad_b}" class="axis-line" />
             {bars}
             {x_labels}
-            <text x="{w / 2}" y="{h - 5}" class="axis-label title-label">Frequency (Hz)</text>
+            <text x="{w / 2}" y="{h - 5}" class="axis-label title-label">Frequency</text>
             <text transform="translate(15, {h / 2}) rotate(-90)" class="axis-label title-label">Power (Log Scale)</text>
         </svg>
-        <div class="legend"><span class="legend-item"><span class="legend-box pd-band"></span>Parkinson's Band (3-7 Hz)</span></div>
+        <div class="legend"><span class="legend-item"><span class="legend-box pd-band-legend"></span>Parkinson's Band (3-7 Hz)</span></div>
         """
 
     # --- PART 2: TEXTUAL ANALYSIS AND DATA GENERATION ---
     stage = metrics['stage']
 
     # Prediction and advice logic
+    stage_styles = {
+        "Mild": {"color": "#198754", "variable": "var(--color-mild)"},
+        "Moderate": {"color": "#ffc107", "variable": "var(--color-moderate)"},
+        "Severe": {"color": "#fd7e14", "variable": "var(--color-severe)"},
+        "Critical": {"color": "#dc3545", "variable": "var(--color-critical)"},
+    }
+    default_style = {"color": "#6c757d", "variable": "var(--text-secondary)"}
+    # Handle cases like "Mild Tremor" by splitting
+    style_key = stage.split(" ")[0]
+    selected_style = stage_styles.get(style_key, default_style)
+    prediction_color_hex = selected_style["color"]
+    prediction_color_var = selected_style["variable"]
+
     if "Mild" in stage:
-        prediction_color = "#28a745"
-        prediction_advice = "The tremor is minimal and may not significantly interfere with daily activities. Monitor for any changes."
+        prediction_advice = "The tremor is minimal and may not significantly interfere with daily activities. Continued monitoring for any changes is advised."
     elif "Moderate" in stage:
-        prediction_color = "#ffc107"
-        prediction_advice = "The tremor is noticeable and may cause some difficulty with tasks. Device intervention may be beneficial."
+        prediction_advice = "The tremor is noticeable and may cause some difficulty with tasks. Therapeutic intervention or device use could be beneficial."
     elif "Severe" in stage:
-        prediction_color = "#fd7e14"
-        prediction_advice = "The tremor is prominent and likely interferes with daily living. Device intervention is highly recommended."
+        prediction_advice = "The tremor is prominent and likely interferes with daily living. Intervention is highly recommended to improve quality of life."
     else:  # Critical
-        prediction_color = "#dc3545"
-        prediction_advice = "The tremor is very severe. The data indicates a critical level of motor symptoms requiring attention."
+        prediction_advice = "The data indicates a critical level of motor symptoms. This requires prompt attention and review of the current management plan."
 
     # Detailed observations logic
     stabilized_rms = np.sqrt(np.mean(df['total_mag_stable'] ** 2)) if 'total_mag_stable' in df else 0
     intensity_obs = (
-        f"The raw hand tremor registered a Root Mean Square (RMS) power of <strong>{metrics['rms_tremor']:.0f}</strong>. "
-        f"The stabilization device successfully reduced this to an RMS of <strong>{stabilized_rms:.0f}</strong>, "
-        f"resulting in a tremor reduction effectiveness of <strong>{metrics['effectiveness']:.1f}%</strong>.")
+        f"Raw hand tremor had a power of <strong>{metrics['rms_tremor']:.0f} RMS</strong>. The stabilization device "
+        f"reduced this to <strong>{stabilized_rms:.0f} RMS</strong>, achieving an effectiveness of "
+        f"<strong>{metrics['effectiveness']:.1f}%</strong>.")
     frequency_obs = (
-        f"Frequency analysis identified a dominant tremor peak at <strong>{metrics['peak_freq']:.2f} Hz</strong>. "
-        f"A significant <strong>{metrics['band_power_3_7_ratio']:.1f}%</strong> of the total movement energy was found "
-        f"within the 3-7 Hz range, a classic biomarker for Parkinsonian tremor.")
+        f"Frequency analysis identified a dominant tremor at <strong>{metrics['peak_freq']:.2f} Hz</strong>. "
+        f"A significant <strong>{metrics['band_power_3_7_ratio']:.1f}%</strong> of energy is in the "
+        f"3-7 Hz Parkinsonian band.")
     quality_obs = (
-        f"The movement's jerkiness (a measure of smoothness) was calculated at <strong>{metrics['rms_jerk'] / 1000:.1f}k</strong>. "
-        f"The spectral entropy was <strong>{metrics['spectral_entropy']:.2f}</strong>, indicating a tremor with "
-        f"{'a highly regular and predictable pattern.' if metrics['spectral_entropy'] < 3.5 else 'some irregularity and randomness.'}")
+        f"Movement smoothness was evaluated, yielding a jerkiness value of <strong>{metrics['rms_jerk'] / 1000:.1f}k</strong>. "
+        f"The spectral entropy of <strong>{metrics['spectral_entropy']:.2f}</strong> suggests a tremor with "
+        f"{'a highly regular pattern.' if metrics['spectral_entropy'] < 3.5 else 'some irregularity.'}")
 
     # Full data table logic
     metric_table_rows = "".join([
@@ -393,7 +439,6 @@ def generate_html_report(window_analysis, patient_details, window_str):
 
     # --- PART 3: HTML ASSEMBLY ---
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
     movement_chart_svg = create_svg_movement_chart(df)
     frequency_chart_svg = create_svg_frequency_chart(fft_df)
 
@@ -404,97 +449,179 @@ def generate_html_report(window_analysis, patient_details, window_str):
     <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Movement Report: {patient_details.get('patient_id', 'N/A')}</title>
 <style>
-  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f8f9fa; color: #343a40; }}
-  .container {{ max-width: 800px; margin: 20px auto; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border-radius: 12px; }}
-  .header {{ padding: 25px; border-bottom: 1px solid #dee2e6; }}
-  .header h1 {{ margin: 0; color: #212529; font-size: 26px; }}
-  .header p {{ margin: 5px 0 0; color: #6c757d; font-size: 14px; }}
-  .content {{ padding: 5px 25px 25px 25px; }}
-  .card {{ background: #fff; border: 1px solid #e9ecef; border-radius: 8px; margin-bottom: 25px; overflow: hidden;}}
-  .card-header {{ padding: 15px 20px; background-color: #f8f9fa; border-bottom: 1px solid #e9ecef; }}
-  .card-header h2 {{ font-size: 18px; margin: 0; color: #495057; }}
-  .card-body {{ padding: 20px; }}
-  .footer {{ text-align: center; font-size: 12px; color: #6c757d; padding: 20px; border-top: 1px solid #dee2e6; }}
-  /* Prediction Box */
-  .prediction-box {{ padding: 20px; border-radius: 8px; text-align: center; color: white; background-color: {prediction_color}; }}
-  .prediction-box .stage {{ font-size: 28px; font-weight: 700; margin: 0; }}
-  .prediction-box .score {{ font-size: 16px; opacity: 0.9; margin: 4px 0 10px 0; }}
-  .prediction-box .advice {{ font-size: 14px; font-style: italic; opacity: 0.95; max-width: 90%; margin: auto; }}
-  /* Observations */
-  .observation {{ font-size: 15px; line-height: 1.6; background-color: #f8f9fa; border-left: 4px solid #ced4da; padding: 10px 15px; margin-top: 10px; border-radius: 0 4px 4px 0; }}
-  /* Data Table */
-  table {{ width: 100%; border-collapse: collapse; }}
-  td {{ padding: 12px; border-bottom: 1px solid #f1f3f5; font-size: 15px; }}
-  td:first-child {{ color: #495057; }}
-  td:last-child {{ font-weight: 600; text-align: right; font-family: 'Menlo', 'Consolas', monospace; color: #0056b3;}}
-  tr:last-child td {{ border-bottom: none; }}
-  /* SVG Chart Styles */
-  .chart {{ background-color: #fdfdfe; border-radius: 4px; }}
-  .grid-line {{ stroke: #e9ecef; stroke-width: 1; }}
-  .axis-line {{ stroke: #adb5bd; stroke-width: 2; }}
-  .axis-label {{ font-size: 11px; fill: #6c757d; text-anchor: middle; }}
-  .axis-label.y-label {{ text-anchor: end; }}
-  .axis-label.x-label {{ text-anchor: middle; }}
-  .line-movement {{ fill: none; stroke: #007bff; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }}
-  .bar {{ fill: #007bff; }}
-  .pd-band {{ fill: rgba(220, 53, 69, 0.15); }}
-  .legend {{ padding: 10px 20px; text-align: center; font-size: 12px; color: #495057; }}
+  :root {{
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: 'Menlo', 'Consolas', 'SFMono-Regular', 'source-code-pro', monospace;
+    --bg-color: #f8f9fa;
+    --card-bg-color: #ffffff;
+    --text-primary: #212529;
+    --text-secondary: #6c757d;
+    --border-color: #e9ecef;
+    --primary-color: #0d6efd;
+    --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --border-radius: 0.75rem;
+    --color-mild: #198754;
+    --color-moderate: #ffc107;
+    --color-severe: #fd7e14;
+    --color-critical: #dc3545;
+    --prediction-color: {prediction_color_var};
+  }}
+  body {{
+    font-family: var(--font-sans); margin: 0; padding: 2rem 1rem;
+    background-color: var(--bg-color); color: var(--text-primary);
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+  }}
+  .container {{
+    max-width: 900px; margin: 0 auto; background-color: var(--card-bg-color);
+    box-shadow: var(--shadow); border-radius: var(--border-radius); overflow: hidden;
+  }}
+  .header {{
+    padding: 2rem 2.5rem; border-bottom: 1px solid var(--border-color);
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;
+  }}
+  .header h1 {{ margin: 0; font-size: 1.75rem; font-weight: 700; color: var(--text-primary); }}
+  .header-meta {{ text-align: right; font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5; }}
+  .content {{ padding: 2.5rem; display: grid; gap: 2.5rem; }}
+  .card-header {{
+    display: flex; align-items: center; gap: 0.75rem; padding-bottom: 1rem;
+    margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color);
+  }}
+  .card-header .icon {{ flex-shrink: 0; width: 24px; height: 24px; color: var(--primary-color); }}
+  .card-header h2 {{ font-size: 1.25rem; font-weight: 600; margin: 0; color: var(--text-primary); }}
+  .metrics-grid {{
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1.5rem;
+  }}
+  .metric-card {{
+    background-color: var(--bg-color); padding: 1.25rem; border-radius: 0.5rem;
+    border: 1px solid var(--border-color);
+  }}
+  .metric-card-title {{ font-size: 0.9rem; color: var(--text-secondary); margin: 0 0 0.5rem 0; }}
+  .metric-card-value {{ font-size: 1.75rem; font-weight: 700; margin: 0; line-height: 1.2; }}
+  .metric-card-value.stage-value {{ color: var(--prediction-color); }}
+  .metric-card-unit {{ font-size: 1rem; font-weight: 500; color: var(--text-secondary); margin-left: 0.25rem; }}
+  .advice-card {{
+      padding: 1.25rem; border-radius: 0.5rem; background-color: {prediction_color_hex}1A;
+      border-left: 4px solid var(--prediction-color); font-size: 0.95rem; line-height: 1.6;
+  }}
+  .advice-card p {{ margin: 0; color: var(--text-primary); }}
+  .data-table {{ width: 100%; border-collapse: collapse; font-size: 0.95rem; }}
+  .data-table tr {{ border-bottom: 1px solid var(--border-color); }}
+  .data-table tr:last-child {{ border-bottom: none; }}
+  .data-table td {{ padding: 1rem 0.5rem; vertical-align: middle; }}
+  .data-table td:first-child {{ color: var(--text-secondary); }}
+  .data-table td:last-child {{
+    font-family: var(--font-mono); font-weight: 600; text-align: right; color: var(--text-primary);
+  }}
+  .observation-list {{ display: grid; gap: 1rem; }}
+  .observation {{
+    font-size: 0.95rem; line-height: 1.6; background-color: var(--bg-color); border: 1px solid var(--border-color);
+    padding: 1rem 1.25rem; border-radius: 0.5rem; display: flex; align-items: flex-start; gap: 0.75rem;
+  }}
+  .observation .icon {{ flex-shrink: 0; width: 20px; height: 20px; margin-top: 3px; color: var(--primary-color); }}
+  .chart-container {{
+    border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 1rem;
+    background-color: var(--card-bg-color);
+  }}
+  .chart {{ background-color: var(--card-bg-color); }}
+  .grid-line {{ stroke: #eef2f6; stroke-width: 1; }}
+  .axis-line {{ stroke: #adb5bd; stroke-width: 1; }}
+  .axis-label {{ font-size: 11px; fill: var(--text-secondary); }}
+  .y-label {{ text-anchor: end; }}
+  .x-label {{ text-anchor: middle; }}
+  .title-label {{ font-weight: 500; fill: var(--text-primary); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }}
+  .line-movement {{ fill: none; stroke: var(--primary-color); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }}
+  .area-movement {{ fill: url(#movement-gradient); }}
+  .bar {{ fill: var(--primary-color); }}
+  .pd-band {{ fill: var(--color-critical); opacity: 0.1; }}
+  .legend {{ padding-top: 10px; text-align: center; font-size: 12px; color: var(--text-secondary); }}
   .legend-item {{ display: inline-flex; align-items: center; margin: 0 10px; }}
-  .legend-box {{ width: 14px; height: 14px; margin-right: 5px; border-radius: 2px; }}
+  .legend-box {{ width: 14px; height: 14px; margin-right: 5px; border-radius: 3px; }}
+  .pd-band-legend {{ background-color: rgba(220, 53, 69, 0.3); }}
+  .footer {{
+    text-align: center; font-size: 0.8rem; color: var(--text-secondary);
+    padding: 2rem; background-color: var(--bg-color);
+  }}
 </style>
 </head>
 <body>
   <div class="container">
-    <div class="header">
+    <header class="header">
         <h1>Movement Analysis Report</h1>
-        <p>Patient: {patient_details.get('patient_id', 'N/A')} | Date: {patient_details.get('timestamp', 'N/A')} | Window: {window_str}</p>
-    </div>
-    <div class="content">
-        <div class="card">
-            <div class="card-header"><h2>Tremor Level Predicted</h2></div>
-            <div class="card-body">
-                <div class="prediction-box">
-                    <p class="stage">{stage}</p>
-                    <p class="score">Composite Index: {metrics['composite_index']:.3f}</p>
-                    <p class="advice">{prediction_advice}</p>
+        <div class="header-meta">
+            <strong>Patient:</strong> {patient_details.get('patient_id', 'N/A')}<br>
+            <strong>Date:</strong> {patient_details.get('timestamp', 'N/A')} | <strong>Window:</strong> {window_str}
+        </div>
+    </header>
+    <main class="content">
+        <section class="card">
+            <div class="card-header">
+                {svg_icons["dashboard"]}
+                <h2>Key Metrics</h2>
+            </div>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <p class="metric-card-title">Predicted Severity</p>
+                    <p class="metric-card-value stage-value">{stage}</p>
+                </div>
+                <div class="metric-card">
+                    <p class="metric-card-title">Composite Index</p>
+                    <p class="metric-card-value">{metrics['composite_index']:.3f}</p>
+                </div>
+                <div class="metric-card">
+                    <p class="metric-card-title">Peak Frequency</p>
+                    <p class="metric-card-value">{metrics['peak_freq']:.2f}<span class="metric-card-unit">Hz</span></p>
+                </div>
+                <div class="metric-card">
+                    <p class="metric-card-title">Effectiveness</p>
+                    <p class="metric-card-value">{metrics['effectiveness']:.1f}<span class="metric-card-unit">%</span></p>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <div class="card">
-            <div class="card-header"><h2>Hand Movement Analysis</h2></div>
-            <div class="card-body">{movement_chart_svg}</div>
-        </div>
-
-        <div class="card">
-            <div class="card-header"><h2>Frequency Spectrum</h2></div>
-            <div class="card-body">{frequency_chart_svg}</div>
-        </div>
-
-        <div class="card">
-            <div class="card-header"><h2>Detailed Observations</h2></div>
-            <div class="card-body">
-                <p class="observation">{intensity_obs}</p>
-                <p class="observation">{frequency_obs}</p>
-                <p class="observation">{quality_obs}</p>
+        <section class="card">
+            <div class="advice-card">
+                <p><strong>Clinical Advice:</strong> {prediction_advice}</p>
             </div>
-        </div>
+        </section>
 
-        <div class="card">
-            <div class="card-header"><h2>All Numerical Data</h2></div>
-            <div class="card-body" style="padding: 10px 20px;">
-                <table>{metric_table_rows}</table>
+        <section class="card">
+            <div class="card-header">{svg_icons["chart_line"]}<h2>Hand Movement Analysis</h2></div>
+            <div class="chart-container">{movement_chart_svg}</div>
+        </section>
+
+        <section class="card">
+            <div class="card-header">{svg_icons["chart_bar"]}<h2>Frequency Spectrum</h2></div>
+            <div class="chart-container">{frequency_chart_svg}</div>
+        </section>
+
+        <section class="card">
+            <div class="card-header">{svg_icons["list_check"]}<h2>Detailed Observations</h2></div>
+            <div class="observation-list">
+                <div class="observation">{svg_icons["zap"]}{intensity_obs}</div>
+                <div class="observation">{svg_icons["activity"]}{frequency_obs}</div>
+                <div class="observation">{svg_icons["sparkles"]}{quality_obs}</div>
             </div>
-        </div>
-    </div>
-    <div class="footer">
-      Generated on: {now}. This is a quantitative report for clinical review and research.
-    </div>
+        </section>
+
+        <section class="card">
+            <div class="card-header">{svg_icons["table"]}<h2>All Numerical Data</h2></div>
+            <table class="data-table">{metric_table_rows}</table>
+        </section>
+    </main>
+    <footer class="footer">
+      Report generated on {now}. This is a quantitative report for clinical review and research purposes.
+    </footer>
   </div>
 </body>
 </html>
 """
     return html
+
+
+
+
+
+
 # --- MAIN DASHBOARD DISPLAY (Unchanged) ---
 def display_dashboard(df, metrics, fft_df, spec_data, corr_matrix, display_info, current_window=None):
     st.title("Advanced Parkinson's Movement Analyzer")
