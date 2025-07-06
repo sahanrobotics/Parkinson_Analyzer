@@ -207,7 +207,7 @@ def perform_advanced_analysis(data):
                                       weights.w_rms * norm_rms + weights.w_freq * norm_power_ratio + weights.w_jerk * norm_jerk) / weight_sum if weight_sum > 0 else 0
         f_spec, t_spec, Sxx = spectrogram(df['total_mag'], fs);
         peak_freq_idx = np.argmax(power_spectrum)
-        peak_freq = xf[peak_freq_idx] if peak_freq_idx < len(xf) else 0
+        peak_freq = xf[peak_freq_idx] if peak_freq_idx < len(xf) else len(xf)
         power_in_band_3_7_mask = (xf >= 3) & (xf <= 7);
         power_in_band_3_7 = np.sum(power_spectrum[power_in_band_3_7_mask])
         power_in_band_ratio_3_7 = power_in_band_3_7 / total_power
