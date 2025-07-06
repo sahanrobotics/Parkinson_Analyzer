@@ -263,10 +263,15 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 
+import numpy as np
+import pandas as pd
+from datetime import datetime
+import re
+
 
 def generate_html_report(window_analysis, patient_details, window_str):
     """
-    Generates a complete, visually rich, and data-dense report with a modern design.
+    Generates a complete, visually rich, and data-dense report with a modern, professional design.
     It combines high-quality SVG graphs with detailed textual analysis and numerical tables,
     remaining 100% reliable with no external dependencies.
     """
@@ -282,7 +287,7 @@ def generate_html_report(window_analysis, patient_details, window_str):
         "list_check": '<svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zm0-8h14V7H7v2z"/></svg>',
         "table": '<svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM8 17H5v-3h3v3zm0-5H5V9h3v3zm0-5H5V4h3v3zm5 10h-3v-3h3v3zm0-5h-3V9h3v3zm0-5h-3V4h3v3zm5 10h-3v-3h3v3zm0-5h-3V9h3v3zm0-5h-3V4h3v3z"/></svg>',
         "zap": '<svg class="icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>',
-        "activity": '<svg class="icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h.007v.007H3.75V12zm4.125 0h.007v.007h-.007V12zm4.125 0h.007v.007h-.007V12zm4.125 0h.007v.007h-.007V12zm4.125 0h.007v.007h-.007V12z" /></svg>',
+        "activity": '<svg class="icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>',
         "sparkles": '<svg class="icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM18 13.5l.375 1.5.375-1.5a2.625 2.625 0 00-1.682-1.682L15 11.25l1.5.375a2.625 2.625 0 001.682-1.682L18 8.25l-.375 1.5-.375-1.5a2.625 2.625 0 00-1.682 1.682L13.5 12l1.5.375a2.625 2.625 0 001.682 1.682z" /></svg>'
     }
 
@@ -343,7 +348,7 @@ def generate_html_report(window_analysis, patient_details, window_str):
     # --- SVG HELPER 2: FREQUENCY (SPECTRUM) CHART ---
     def create_svg_frequency_chart(fft_df):
         fft_filt = fft_df[(fft_df['Frequency (Hz)'] >= 1) & (fft_df['Frequency (Hz)'] <= 25)].copy()
-        if fft_filt.empty: return "<p>No frequency data to display.</p>"
+        if fft_filt.empty: return "<p class='chart-nodata'>No frequency data to display.</p>"
 
         fft_filt['log_power'] = np.log1p(fft_filt['Power'])
         max_log_power = fft_filt['log_power'].max() or 1
@@ -382,47 +387,50 @@ def generate_html_report(window_analysis, patient_details, window_str):
         """
 
     # --- PART 2: TEXTUAL ANALYSIS AND DATA GENERATION ---
-    stage = metrics['stage']
 
-    # Prediction and advice logic
+    # --- Stage Parsing and Styling Logic ---
+    stage_text = metrics.get('stage', 'Unknown')
+
+    # Use regex to find number and text, e.g., "Stage 3 - Severe"
+    match = re.search(r'(Stage\s*\d+)?\s*-?\s*(Mild|Moderate|Severe|Critical)', stage_text, re.IGNORECASE)
+
+    stage_number_html = ""
+    stage_name = stage_text  # Fallback
+
+    if match:
+        stage_num_part = match.group(1)
+        stage_name_part = match.group(2).capitalize()
+
+        stage_name = stage_name_part
+        if stage_num_part:
+            stage_number_html = f'<span class="stage-number">{stage_num_part}</span>'
+
     stage_styles = {
-        "Mild": {"color": "#198754", "variable": "var(--color-mild)"},
-        "Moderate": {"color": "#ffc107", "variable": "var(--color-moderate)"},
-        "Severe": {"color": "#fd7e14", "variable": "var(--color-severe)"},
-        "Critical": {"color": "#dc3545", "variable": "var(--color-critical)"},
+        "Mild": {"color": "#198754", "bg": "#1987541A", "variable": "var(--color-mild)"},
+        "Moderate": {"color": "#ffc107", "bg": "#ffc1071A", "variable": "var(--color-moderate)"},
+        "Severe": {"color": "#fd7e14", "bg": "#fd7e141A", "variable": "var(--color-severe)"},
+        "Critical": {"color": "#dc3545", "bg": "#dc35451A", "variable": "var(--color-critical)"},
     }
-    default_style = {"color": "#6c757d", "variable": "var(--text-secondary)"}
-    # Handle cases like "Mild Tremor" by splitting
-    style_key = stage.split(" ")[0]
-    selected_style = stage_styles.get(style_key, default_style)
-    prediction_color_hex = selected_style["color"]
+    default_style = {"color": "#6c757d", "bg": "#6c757d1A", "variable": "var(--text-secondary)"}
+    selected_style = stage_styles.get(stage_name, default_style)
+
     prediction_color_var = selected_style["variable"]
+    prediction_bg_color = selected_style["bg"]
 
-    if "Mild" in stage:
-        prediction_advice = "The tremor is minimal and may not significantly interfere with daily activities. Continued monitoring for any changes is advised."
-    elif "Moderate" in stage:
-        prediction_advice = "The tremor is noticeable and may cause some difficulty with tasks. Therapeutic intervention or device use could be beneficial."
-    elif "Severe" in stage:
-        prediction_advice = "The tremor is prominent and likely interferes with daily living. Intervention is highly recommended to improve quality of life."
-    else:  # Critical
-        prediction_advice = "The data indicates a critical level of motor symptoms. This requires prompt attention and review of the current management plan."
+    # --- Advice Logic ---
+    if "Mild" in stage_name:
+        prediction_advice = "The tremor is minimal. Continued monitoring for any changes is advised."
+    elif "Moderate" in stage_name:
+        prediction_advice = "The tremor is noticeable and may cause difficulty. Therapeutic intervention could be beneficial."
+    elif "Severe" in stage_name:
+        prediction_advice = "The tremor is prominent and likely interferes with daily living. Intervention is highly recommended."
+    else:  # Critical or Unknown
+        prediction_advice = "The data indicates a critical level of motor symptoms requiring prompt review of the current management plan."
 
-    # Detailed observations logic
+    # --- Detailed Observations Logic ---
     stabilized_rms = np.sqrt(np.mean(df['total_mag_stable'] ** 2)) if 'total_mag_stable' in df else 0
-    intensity_obs = (
-        f"Raw hand tremor had a power of <strong>{metrics['rms_tremor']:.0f} RMS</strong>. The stabilization device "
-        f"reduced this to <strong>{stabilized_rms:.0f} RMS</strong>, achieving an effectiveness of "
-        f"<strong>{metrics['effectiveness']:.1f}%</strong>.")
-    frequency_obs = (
-        f"Frequency analysis identified a dominant tremor at <strong>{metrics['peak_freq']:.2f} Hz</strong>. "
-        f"A significant <strong>{metrics['band_power_3_7_ratio']:.1f}%</strong> of energy is in the "
-        f"3-7 Hz Parkinsonian band.")
-    quality_obs = (
-        f"Movement smoothness was evaluated, yielding a jerkiness value of <strong>{metrics['rms_jerk'] / 1000:.1f}k</strong>. "
-        f"The spectral entropy of <strong>{metrics['spectral_entropy']:.2f}</strong> suggests a tremor with "
-        f"{'a highly regular pattern.' if metrics['spectral_entropy'] < 3.5 else 'some irregularity.'}")
 
-    # Full data table logic
+    # --- Full Data Table Logic ---
     metric_table_rows = "".join([
         f"<tr><td>{label}</td><td>{val}</td></tr>" for label, val in [
             ("Composite Severity Index", f"{metrics['composite_index']:.3f}"),
@@ -488,46 +496,45 @@ def generate_html_report(window_analysis, patient_details, window_str):
   }}
   .card-header .icon {{ flex-shrink: 0; width: 24px; height: 24px; color: var(--primary-color); }}
   .card-header h2 {{ font-size: 1.25rem; font-weight: 600; margin: 0; color: var(--text-primary); }}
-  .metrics-grid {{
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1.5rem;
-  }}
-  .metric-card {{
-    background-color: var(--bg-color); padding: 1.25rem; border-radius: 0.5rem;
-    border: 1px solid var(--border-color);
-  }}
+
+  .metrics-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; }}
+  .metric-card {{ background-color: #f8f9fa; padding: 1.25rem; border-radius: 0.5rem; border: 1px solid var(--border-color); transition: transform 0.2s ease, box-shadow 0.2s ease; }}
+  .metric-card:hover {{ transform: translateY(-3px); box-shadow: var(--shadow); }}
   .metric-card-title {{ font-size: 0.9rem; color: var(--text-secondary); margin: 0 0 0.5rem 0; }}
   .metric-card-value {{ font-size: 1.75rem; font-weight: 700; margin: 0; line-height: 1.2; }}
-  .metric-card-value.stage-value {{ color: var(--prediction-color); }}
   .metric-card-unit {{ font-size: 1rem; font-weight: 500; color: var(--text-secondary); margin-left: 0.25rem; }}
-  .advice-card {{
-      padding: 1.25rem; border-radius: 0.5rem; background-color: {prediction_color_hex}1A;
-      border-left: 4px solid var(--prediction-color); font-size: 0.95rem; line-height: 1.6;
-  }}
+
+  .severity-card {{ background-color: {prediction_bg_color}; border-left: 5px solid var(--prediction-color); }}
+  .severity-card .metric-card-title {{ color: var(--prediction-color); font-weight: 500; }}
+  .severity-card .metric-card-value {{ color: var(--prediction-color); font-size: 2rem; }}
+  .stage-number {{ display: block; font-size: 1rem; font-weight: 500; opacity: 0.8; margin-bottom: 0.25rem; }}
+
+  .advice-card {{ padding: 1.25rem; border-radius: 0.5rem; background-color: #e9ecef40; border-left: 4px solid var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }}
   .advice-card p {{ margin: 0; color: var(--text-primary); }}
+
+  .observation-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; }}
+  .observation-card {{ background: #fff; border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 1.25rem; }}
+  .observation-card-header {{ display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }}
+  .observation-card-icon {{ flex-shrink: 0; width: 24px; height: 24px; color: var(--primary-color); }}
+  .observation-card-title {{ font-size: 1rem; font-weight: 600; margin: 0; }}
+  .observation-card-body {{ font-size: 0.9rem; line-height: 1.6; color: var(--text-secondary); }}
+  .observation-card-body strong {{ color: var(--text-primary); font-weight: 600; }}
+
   .data-table {{ width: 100%; border-collapse: collapse; font-size: 0.95rem; }}
   .data-table tr {{ border-bottom: 1px solid var(--border-color); }}
   .data-table tr:last-child {{ border-bottom: none; }}
   .data-table td {{ padding: 1rem 0.5rem; vertical-align: middle; }}
   .data-table td:first-child {{ color: var(--text-secondary); }}
-  .data-table td:last-child {{
-    font-family: var(--font-mono); font-weight: 600; text-align: right; color: var(--text-primary);
-  }}
-  .observation-list {{ display: grid; gap: 1rem; }}
-  .observation {{
-    font-size: 0.95rem; line-height: 1.6; background-color: var(--bg-color); border: 1px solid var(--border-color);
-    padding: 1rem 1.25rem; border-radius: 0.5rem; display: flex; align-items: flex-start; gap: 0.75rem;
-  }}
-  .observation .icon {{ flex-shrink: 0; width: 20px; height: 20px; margin-top: 3px; color: var(--primary-color); }}
-  .chart-container {{
-    border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 1rem;
-    background-color: var(--card-bg-color);
-  }}
+  .data-table td:last-child {{ font-family: var(--font-mono); font-weight: 600; text-align: right; color: var(--text-primary); }}
+
+  .chart-container {{ border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 1rem; background-color: var(--card-bg-color); }}
+  .chart-nodata {{ padding: 3rem 1rem; text-align: center; color: var(--text-secondary); }}
   .chart {{ background-color: var(--card-bg-color); }}
   .grid-line {{ stroke: #eef2f6; stroke-width: 1; }}
   .axis-line {{ stroke: #adb5bd; stroke-width: 1; }}
   .axis-label {{ font-size: 11px; fill: var(--text-secondary); }}
+  .y-label, .x-label {{ text-anchor: middle; }}
   .y-label {{ text-anchor: end; }}
-  .x-label {{ text-anchor: middle; }}
   .title-label {{ font-weight: 500; fill: var(--text-primary); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }}
   .line-movement {{ fill: none; stroke: var(--primary-color); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }}
   .area-movement {{ fill: url(#movement-gradient); }}
@@ -537,10 +544,12 @@ def generate_html_report(window_analysis, patient_details, window_str):
   .legend-item {{ display: inline-flex; align-items: center; margin: 0 10px; }}
   .legend-box {{ width: 14px; height: 14px; margin-right: 5px; border-radius: 3px; }}
   .pd-band-legend {{ background-color: rgba(220, 53, 69, 0.3); }}
-  .footer {{
-    text-align: center; font-size: 0.8rem; color: var(--text-secondary);
-    padding: 2rem; background-color: var(--bg-color);
-  }}
+
+  .footer {{ text-align: center; color: var(--text-secondary); padding: 2.5rem; background-color: var(--bg-color); }}
+  .footer .timestamp {{ font-size: 0.8rem; margin-bottom: 1.5rem; }}
+  .project-footer {{ border-top: 1px solid var(--border-color); padding-top: 1.5rem; font-size: 0.85rem; line-height: 1.6; }}
+  .project-footer p {{ margin: 0.25rem 0; }}
+  .project-footer .title {{ font-weight: 600; color: var(--text-primary); }}
 </style>
 </head>
 <body>
@@ -554,14 +563,11 @@ def generate_html_report(window_analysis, patient_details, window_str):
     </header>
     <main class="content">
         <section class="card">
-            <div class="card-header">
-                {svg_icons["dashboard"]}
-                <h2>Key Metrics</h2>
-            </div>
+            <div class="card-header">{svg_icons["dashboard"]}<h2>Analysis Summary</h2></div>
             <div class="metrics-grid">
-                <div class="metric-card">
+                <div class="metric-card severity-card">
                     <p class="metric-card-title">Predicted Severity</p>
-                    <p class="metric-card-value stage-value">{stage}</p>
+                    <p class="metric-card-value">{stage_number_html}{stage_name}</p>
                 </div>
                 <div class="metric-card">
                     <p class="metric-card-title">Composite Index</p>
@@ -572,15 +578,48 @@ def generate_html_report(window_analysis, patient_details, window_str):
                     <p class="metric-card-value">{metrics['peak_freq']:.2f}<span class="metric-card-unit">Hz</span></p>
                 </div>
                 <div class="metric-card">
-                    <p class="metric-card-title">Effectiveness</p>
+                    <p class="metric-card-title">Stabilizer Effectiveness</p>
                     <p class="metric-card-value">{metrics['effectiveness']:.1f}<span class="metric-card-unit">%</span></p>
                 </div>
+            </div>
+            <div style="margin-top: 1.5rem;" class="advice-card">
+                <p><strong>Clinical Advice:</strong> {prediction_advice}</p>
             </div>
         </section>
 
         <section class="card">
-            <div class="advice-card">
-                <p><strong>Clinical Advice:</strong> {prediction_advice}</p>
+            <div class="card-header">{svg_icons["list_check"]}<h2>Detailed Observations</h2></div>
+            <div class="observation-grid">
+                <div class="observation-card">
+                    <div class="observation-card-header">
+                        <div class="observation-card-icon">{svg_icons["zap"]}</div>
+                        <h3 class="observation-card-title">Intensity & Effectiveness</h3>
+                    </div>
+                    <div class="observation-card-body">
+                        Raw tremor power was <strong>{metrics['rms_tremor']:.0f} RMS</strong>. The device reduced this to 
+                        <strong>{stabilized_rms:.0f} RMS</strong>, showing an effectiveness of <strong>{metrics['effectiveness']:.1f}%</strong>.
+                    </div>
+                </div>
+                <div class="observation-card">
+                    <div class="observation-card-header">
+                        <div class="observation-card-icon">{svg_icons["activity"]}</div>
+                        <h3 class="observation-card-title">Frequency Profile</h3>
+                    </div>
+                    <div class="observation-card-body">
+                        A dominant tremor was found at <strong>{metrics['peak_freq']:.2f} Hz</strong>, with <strong>{metrics['band_power_3_7_ratio']:.1f}%</strong> of energy 
+                        in the 3-7 Hz Parkinsonian band.
+                    </div>
+                </div>
+                <div class="observation-card">
+                    <div class="observation-card-header">
+                        <div class="observation-card-icon">{svg_icons["sparkles"]}</div>
+                        <h3 class="observation-card-title">Movement Quality</h3>
+                    </div>
+                    <div class="observation-card-body">
+                        Movement smoothness (jerkiness) was <strong>{metrics['rms_jerk'] / 1000:.1f}k</strong>. Entropy of <strong>{metrics['spectral_entropy']:.2f}</strong> suggests a 
+                        {'highly regular tremor.' if metrics['spectral_entropy'] < 3.5 else 'somewhat irregular tremor.'}
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -595,29 +634,23 @@ def generate_html_report(window_analysis, patient_details, window_str):
         </section>
 
         <section class="card">
-            <div class="card-header">{svg_icons["list_check"]}<h2>Detailed Observations</h2></div>
-            <div class="observation-list">
-                <div class="observation">{svg_icons["zap"]}{intensity_obs}</div>
-                <div class="observation">{svg_icons["activity"]}{frequency_obs}</div>
-                <div class="observation">{svg_icons["sparkles"]}{quality_obs}</div>
-            </div>
-        </section>
-
-        <section class="card">
             <div class="card-header">{svg_icons["table"]}<h2>All Numerical Data</h2></div>
             <table class="data-table">{metric_table_rows}</table>
         </section>
     </main>
     <footer class="footer">
-      Report generated on {now}. This is a quantitative report for clinical review and research purposes.
+      <p class="timestamp">Report generated on {now}. This is a quantitative report for clinical review and research purposes.</p>
+      <div class="project-footer">
+          <p class="title">Project: Vibration Analyzed Smart Glove to Aid Parkinson's Patient Hand Tremor with Postural Stability</p>
+          <p><strong>Team:</strong> 22LE1-035 S.A.P.U.Hemachandra | 22LE2-082 I.H.C.Udayanga | Group: B 07-18</p>
+          <p><strong>Supervisor:</strong> Mr. Nuwan Attanayake</p>
+      </div>
     </footer>
   </div>
 </body>
 </html>
 """
     return html
-
-
 
 
 
