@@ -263,35 +263,31 @@ def format_stage_with_color(stage_string):
 
 def generate_html_report(window_analysis, patient_details, window_str):
     """
-    Generates a high-fidelity, two-graph report using pure SVG for maximum clarity and reliability.
-    Focuses on 1) Hand Movement and 2) Frequency Spectrum with a clear Parkinson's Band.
+    Generates a complete, visually rich, and data-dense report.
+    It combines high-quality SVG graphs with detailed textual analysis and numerical tables,
+    remaining 100% reliable with no external dependencies.
     """
     df, metrics, fft_df, _, _ = window_analysis
 
+    # --- PART 1: SVG GRAPH GENERATION ---
+
     # --- SVG HELPER 1: MOVEMENT (TIME-SERIES) CHART ---
     def create_svg_movement_chart(df):
-        # Downsample data for performance if there are many points
         data_points = df[['time_s', 'total_mag']]
         if len(data_points) > 400:
             step = len(data_points) // 400
             data_points = data_points.iloc[::step]
 
-        # SVG dimensions
         w, h, pad_t, pad_b, pad_l, pad_r = 700, 250, 20, 30, 40, 20
         chart_w, chart_h = w - pad_l - pad_r, h - pad_t - pad_b
-
-        # Data scaling
-        max_time = data_points['time_s'].max()
+        max_time = data_points['time_s'].max() or 1
         max_accel = data_points['total_mag'].max() * 1.1 or 1
 
-        # Generate SVG <polyline> points
         points = " ".join([
             f"{(row['time_s'] / max_time) * chart_w + pad_l:.2f},"
             f"{pad_t + chart_h - (row['total_mag'] / max_accel) * chart_h:.2f}"
             for _, row in data_points.iterrows()
         ])
-
-        # Generate Y-axis grid lines and labels
         y_grid_lines = ""
         for i in range(5):
             y_pos = pad_t + (chart_h / 4) * i
@@ -301,11 +297,8 @@ def generate_html_report(window_analysis, patient_details, window_str):
 
         return f"""
         <svg width="100%" viewBox="0 0 {w} {h}" class="chart">
-            <!-- Grid Lines -->
             {y_grid_lines}
-            <!-- Data Line -->
             <polyline points="{points}" class="line-movement" />
-            <!-- Axis Labels -->
             <text x="{w / 2}" y="{h - 5}" class="axis-label title-label">Time (seconds)</text>
             <text transform="translate(15, {h / 2}) rotate(-90)" class="axis-label title-label">Acceleration</text>
         </svg>
@@ -313,35 +306,26 @@ def generate_html_report(window_analysis, patient_details, window_str):
 
     # --- SVG HELPER 2: FREQUENCY (SPECTRUM) CHART ---
     def create_svg_frequency_chart(fft_df):
-        # Filter for relevant frequencies
         fft_filt = fft_df[(fft_df['Frequency (Hz)'] >= 1) & (fft_df['Frequency (Hz)'] <= 25)].copy()
         if fft_filt.empty: return "<p>No frequency data to display.</p>"
 
-        # Use log scale for power for better visualization
         fft_filt['log_power'] = np.log1p(fft_filt['Power'])
         max_log_power = fft_filt['log_power'].max() or 1
 
-        # SVG dimensions
         w, h, pad_t, pad_b, pad_l, pad_r = 700, 250, 20, 30, 40, 20
         chart_w, chart_h = w - pad_l - pad_r, h - pad_t - pad_b
-
-        # X-axis scaling
         max_freq = 25
 
-        # Essential: Parkinson's Band
         band_x_start = pad_l + (3 / max_freq) * chart_w
         band_width = ((7 - 3) / max_freq) * chart_w
         pd_band_rect = f'<rect x="{band_x_start}" y="{pad_t}" width="{band_width}" height="{chart_h}" class="pd-band" />'
 
-        # Generate SVG <rect> for each bar
         bars = "".join([
             f'<rect x="{pad_l + (row["Frequency (Hz)"] / max_freq) * chart_w - 1:.2f}" '
             f'y="{pad_t + chart_h - (row["log_power"] / max_log_power) * chart_h:.2f}" '
             f'width="3" height="{(row["log_power"] / max_log_power) * chart_h:.2f}" class="bar" />'
             for _, row in fft_filt.iterrows()
         ])
-
-        # X-axis labels
         x_labels = ""
         for freq_label in [5, 10, 15, 20, 25]:
             x_pos = pad_l + (freq_label / max_freq) * chart_w
@@ -349,33 +333,70 @@ def generate_html_report(window_analysis, patient_details, window_str):
 
         return f"""
         <svg width="100%" viewBox="0 0 {w} {h}" class="chart">
-            <!-- Parkinson's Band (ESSENTIAL) -->
             {pd_band_rect}
-            <!-- Y Axis Line -->
             <line x1="{pad_l}" y1="{pad_t}" x2="{pad_l}" y2="{pad_t + chart_h}" class="axis-line" />
-            <!-- X Axis Line -->
             <line x1="{pad_l}" y1="{pad_t + chart_h}" x2="{pad_l + chart_w}" y2="{pad_t + chart_h}" class="axis-line" />
-            <!-- Data Bars -->
             {bars}
-            <!-- Axis Labels -->
             {x_labels}
             <text x="{w / 2}" y="{h - 5}" class="axis-label title-label">Frequency (Hz)</text>
             <text transform="translate(15, {h / 2}) rotate(-90)" class="axis-label title-label">Power (Log Scale)</text>
         </svg>
-        <div class="legend">
-            <span class="legend-item"><span class="legend-box pd-band"></span>Parkinson's Band (3-7 Hz)</span>
-        </div>
+        <div class="legend"><span class="legend-item"><span class="legend-box pd-band"></span>Parkinson's Band (3-7 Hz)</span></div>
         """
 
-    # --- Main Report Assembly ---
+    # --- PART 2: TEXTUAL ANALYSIS AND DATA GENERATION ---
     stage = metrics['stage']
+
+    # Prediction and advice logic
+    if "Mild" in stage:
+        prediction_color = "#28a745"
+        prediction_advice = "The tremor is minimal and may not significantly interfere with daily activities. Monitor for any changes."
+    elif "Moderate" in stage:
+        prediction_color = "#ffc107"
+        prediction_advice = "The tremor is noticeable and may cause some difficulty with tasks. Device intervention may be beneficial."
+    elif "Severe" in stage:
+        prediction_color = "#fd7e14"
+        prediction_advice = "The tremor is prominent and likely interferes with daily living. Device intervention is highly recommended."
+    else:  # Critical
+        prediction_color = "#dc3545"
+        prediction_advice = "The tremor is very severe. The data indicates a critical level of motor symptoms requiring attention."
+
+    # Detailed observations logic
+    stabilized_rms = np.sqrt(np.mean(df['total_mag_stable'] ** 2)) if 'total_mag_stable' in df else 0
+    intensity_obs = (
+        f"The raw hand tremor registered a Root Mean Square (RMS) power of <strong>{metrics['rms_tremor']:.0f}</strong>. "
+        f"The stabilization device successfully reduced this to an RMS of <strong>{stabilized_rms:.0f}</strong>, "
+        f"resulting in a tremor reduction effectiveness of <strong>{metrics['effectiveness']:.1f}%</strong>.")
+    frequency_obs = (
+        f"Frequency analysis identified a dominant tremor peak at <strong>{metrics['peak_freq']:.2f} Hz</strong>. "
+        f"A significant <strong>{metrics['band_power_3_7_ratio']:.1f}%</strong> of the total movement energy was found "
+        f"within the 3-7 Hz range, a classic biomarker for Parkinsonian tremor.")
+    quality_obs = (
+        f"The movement's jerkiness (a measure of smoothness) was calculated at <strong>{metrics['rms_jerk'] / 1000:.1f}k</strong>. "
+        f"The spectral entropy was <strong>{metrics['spectral_entropy']:.2f}</strong>, indicating a tremor with "
+        f"{'a highly regular and predictable pattern.' if metrics['spectral_entropy'] < 3.5 else 'some irregularity and randomness.'}")
+
+    # Full data table logic
+    metric_table_rows = "".join([
+        f"<tr><td>{label}</td><td>{val}</td></tr>" for label, val in [
+            ("Composite Severity Index", f"{metrics['composite_index']:.3f}"),
+            ("Peak Tremor Frequency", f"{metrics['peak_freq']:.2f} Hz"),
+            ("Power in Parkinson's Band (3-7Hz)", f"{metrics['band_power_3_7_ratio']:.1f} %"),
+            ("Overall Tremor Intensity (RMS)", f"{metrics['rms_tremor']:.0f}"),
+            ("Stabilizer Effectiveness", f"{metrics['effectiveness']:.1f} %"),
+            ("Movement Jerkiness (RMS Jerk)", f"{metrics['rms_jerk'] / 1000:.1f} k"),
+            ("Movement Randomness (Entropy)", f"{metrics['spectral_entropy']:.2f}"),
+            ("Crest Factor", f"{metrics['crest_factor']:.2f}"),
+            ("Signal Magnitude Area", f"{metrics['sma']:.1f}"),
+        ]
+    ])
+
+    # --- PART 3: HTML ASSEMBLY ---
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    # Generate the graphs using the SVG helpers
     movement_chart_svg = create_svg_movement_chart(df)
     frequency_chart_svg = create_svg_frequency_chart(fft_df)
 
-    # Main HTML structure
     html = f"""
 <!DOCTYPE html>
 <html lang="en">
@@ -393,13 +414,20 @@ def generate_html_report(window_analysis, patient_details, window_str):
   .card-header {{ padding: 15px 20px; background-color: #f8f9fa; border-bottom: 1px solid #e9ecef; }}
   .card-header h2 {{ font-size: 18px; margin: 0; color: #495057; }}
   .card-body {{ padding: 20px; }}
+  .footer {{ text-align: center; font-size: 12px; color: #6c757d; padding: 20px; border-top: 1px solid #dee2e6; }}
+  /* Prediction Box */
+  .prediction-box {{ padding: 20px; border-radius: 8px; text-align: center; color: white; background-color: {prediction_color}; }}
+  .prediction-box .stage {{ font-size: 28px; font-weight: 700; margin: 0; }}
+  .prediction-box .score {{ font-size: 16px; opacity: 0.9; margin: 4px 0 10px 0; }}
+  .prediction-box .advice {{ font-size: 14px; font-style: italic; opacity: 0.95; max-width: 90%; margin: auto; }}
+  /* Observations */
+  .observation {{ font-size: 15px; line-height: 1.6; background-color: #f8f9fa; border-left: 4px solid #ced4da; padding: 10px 15px; margin-top: 10px; border-radius: 0 4px 4px 0; }}
+  /* Data Table */
   table {{ width: 100%; border-collapse: collapse; }}
   td {{ padding: 12px; border-bottom: 1px solid #f1f3f5; font-size: 15px; }}
   td:first-child {{ color: #495057; }}
   td:last-child {{ font-weight: 600; text-align: right; font-family: 'Menlo', 'Consolas', monospace; color: #0056b3;}}
   tr:last-child td {{ border-bottom: none; }}
-  .footer {{ text-align: center; font-size: 12px; color: #6c757d; padding: 20px; border-top: 1px solid #dee2e6; }}
-
   /* SVG Chart Styles */
   .chart {{ background-color: #fdfdfe; border-radius: 4px; }}
   .grid-line {{ stroke: #e9ecef; stroke-width: 1; }}
@@ -423,6 +451,17 @@ def generate_html_report(window_analysis, patient_details, window_str):
     </div>
     <div class="content">
         <div class="card">
+            <div class="card-header"><h2>Tremor Level Predicted</h2></div>
+            <div class="card-body">
+                <div class="prediction-box">
+                    <p class="stage">{stage}</p>
+                    <p class="score">Composite Index: {metrics['composite_index']:.3f}</p>
+                    <p class="advice">{prediction_advice}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
             <div class="card-header"><h2>Hand Movement Analysis</h2></div>
             <div class="card-body">{movement_chart_svg}</div>
         </div>
@@ -433,15 +472,18 @@ def generate_html_report(window_analysis, patient_details, window_str):
         </div>
 
         <div class="card">
-            <div class="card-header"><h2>Key Clinical Metrics</h2></div>
+            <div class="card-header"><h2>Detailed Observations</h2></div>
             <div class="card-body">
-                <table>
-                    <tr><td>Predicted Tremor Stage</td><td>{stage}</td></tr>
-                    <tr><td>Composite Severity Index</td><td>{metrics['composite_index']:.3f}</td></tr>
-                    <tr><td>Peak Tremor Frequency</td><td>{metrics['peak_freq']:.2f} Hz</td></tr>
-                    <tr><td>Power in 3-7Hz Band</td><td>{metrics['band_power_3_7_ratio']:.1f} %</td></tr>
-                    <tr><td>Overall Tremor Intensity (RMS)</td><td>{metrics['rms_tremor']:.0f}</td></tr>
-                </table>
+                <p class="observation">{intensity_obs}</p>
+                <p class="observation">{frequency_obs}</p>
+                <p class="observation">{quality_obs}</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><h2>All Numerical Data</h2></div>
+            <div class="card-body" style="padding: 10px 20px;">
+                <table>{metric_table_rows}</table>
             </div>
         </div>
     </div>
@@ -453,8 +495,6 @@ def generate_html_report(window_analysis, patient_details, window_str):
 </html>
 """
     return html
-
-
 # --- MAIN DASHBOARD DISPLAY (Unchanged) ---
 def display_dashboard(df, metrics, fft_df, spec_data, corr_matrix, display_info, current_window=None):
     st.title("Advanced Parkinson's Movement Analyzer")
