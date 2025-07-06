@@ -813,6 +813,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+
+
 # --- Auto-Refresh Logic ---
 if st.session_state.is_running and st.session_state.mode == 'Live':
     time.sleep(st.session_state.get('live_refresh_interval', 5))
