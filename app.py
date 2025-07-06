@@ -37,7 +37,7 @@ st.markdown("""
 .clinical-metric .label { font-size: 14px; color: #aaa; margin-bottom: 4px; }
 .clinical-metric .value { font-size: 20px; font-weight: 600; color: #fff; }
 [data-baseweb="tab-list"] { background-color: #0e1117; padding: 6px 10px; border-radius: 10px; border: 1px solid #333; }
-[data-basweeb="tab"] { background-color: #1a1d23; color: #aaa; border-radius: 8px; padding: 10px 16px; margin-right: 6px; font-weight: 500; transition: all 0.2s ease-in-out; }
+[data-baseweb="tab"] { background-color: #1a1d23; color: #aaa; border-radius: 8px; padding: 10px 16px; margin-right: 6px; font-weight: 500; transition: all 0.2s ease-in-out; }
 [data-baseweb="tab"]:hover { background-color: #2b2f36; color: #ddd; }
 [data-baseweb="tab"][aria-selected="true"] { background-color: #4f4f4f; color: white; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
 </style>
@@ -431,132 +431,117 @@ def display_dashboard(df, metrics, fft_df, spec_data, corr_matrix, display_info,
         st.dataframe(df[display_cols].style.format("{:.3f}"), use_container_width=True)
 
 
-# --- NEW PROFESSIONAL REPORT DISPLAY FUNCTION ---
+# --- REVISED PROFESSIONAL REPORT DISPLAY FUNCTION ---
 def display_report_page():
-    """Renders a professional, print-friendly report page with a white background."""
+    """Renders a professional, A4-formatted, print-friendly report page."""
 
     report_info = st.session_state.report_data
     if not report_info:
-        st.error("No report data found. Returning to dashboard.")
-        st.session_state.viewing_report = False
+        st.error("No report data found.");
         st.rerun()
 
     df, metrics, fft_df, _, _ = report_info['analysis']
     patient_details = report_info['details']
     window_str = report_info['window_str']
 
-    # --- Custom CSS for the Report Page (White Theme) ---
-    st.markdown("""
+    st.markdown(f"""
     <style>
-    /* Hide the default Streamlit header, footer, and toolbar */
-    .report-container #stHeader, .report-container .viewerBadge_link__1Srq5, .report-container .styles_toolbar__3_r_5 {
-        display: none !important;
-    }
-    .report-container {
-        background-color: #FFFFFF;
-        color: #111111;
-        padding: 2rem;
-        font-family: 'Helvetica', 'Arial', sans-serif;
-    }
-    .report-container h1, .report-container h2, .report-container h3 {
-        color: #003366; /* Dark blue for headings */
-    }
-    .report-header {
-        border-bottom: 2px solid #003366;
-        padding-bottom: 1rem;
-        margin-bottom: 2rem;
-    }
-    .report-card {
-        border: 1px solid #DDDDDD;
-        border-radius: 8px;
-        padding: 1rem;
-        margin-bottom: 2rem;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    }
-    .report-controls {
-        text-align: right;
-    }
-    /* Style Streamlit's table for the report */
-    .report-container .stTable {
-        font-size: 14px;
-    }
-    .report-container .stTable > table > tbody > tr > td,
-    .report-container .stTable > table > thead > tr > th {
-        border: 1px solid #ccc;
-    }
-    .report-footer {
-        text-align: center;
-        margin-top: 3rem;
-        font-size: 0.8rem;
-        color: #888888;
-        border-top: 1px solid #DDDDDD;
-        padding-top: 1rem;
-    }
-    /* Styles for printing */
-    @media print {
-        /* Hide sidebar and report controls when printing */
-        .main > div[data-testid="stSidebar"], .report-controls {
-            display: none !important;
-        }
-        /* Ensure the main content uses the full page width */
-        section[data-testid="st-container"] {
-            padding-left: 0 !important;
-            padding-right: 0 !important;
-        }
-        .report-container {
-            padding: 0;
-            box-shadow: none;
-            border: none;
-        }
-        .report-card {
-            box-shadow: none;
-            border: 1px solid #ccc;
-        }
-    }
+        /* Define A4 page size and margins for printing */
+        @page {{
+            size: A4;
+            margin: 1cm;
+        }}
+
+        /* General styles for the report page on screen */
+        body {{
+            background-color: #f0f2f6; /* Light grey background for the page */
+        }}
+        .report-container {{
+            background: white;
+            color: #333;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0 auto; /* Center the page on the screen */
+            padding: 2cm;
+            width: 21cm; /* A4 width */
+            min-height: 29.7cm; /* A4 height */
+            box-shadow: 0 0 15px rgba(0,0,0,0.15);
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }}
+        .report-container::-webkit-scrollbar {{
+            display: none; /* Hide scrollbar for Chrome, Safari and Opera */
+        }}
+        .report-container h1 {{ color: #003366; border-bottom: 2px solid #003366; padding-bottom: 10px; }}
+        .report-container h2 {{ color: #004080; border-bottom: 1px solid #d4d4d4; padding-bottom: 5px; margin-top: 25px;}}
+        .report-controls {{ display: flex; justify-content: flex-end; align-items: center; gap: 10px; }}
+
+        /* Table styling for a professional look */
+        .report-container .stTable {{
+            font-size: 11pt;
+        }}
+        .report-container .stTable table {{
+            width: 100%;
+            border-collapse: collapse;
+        }}
+        .report-container .stTable th, .report-container .stTable td {{
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }}
+        .report-container .stTable th {{
+            background-color: #f2f2f2;
+        }}
+
+        /* Hide Streamlit elements and apply print styles */
+        @media print {{
+            body {{
+                background-color: white !important; /* Ensure background is white for print */
+            }}
+            .main > div:first-child {{
+                padding-top: 0; /* Remove Streamlit's default top padding */
+            }}
+            .main > div[data-testid="stSidebar"], .report-controls, #stHeader {{
+                display: none !important; /* Hide sidebar, buttons, and header on print */
+            }}
+            .report-container {{
+                margin: 0;
+                padding: 0;
+                width: 100%;
+                min-height: 0;
+                box-shadow: none; /* Remove shadow for printing */
+                border: none;
+            }}
+        }}
     </style>
     """, unsafe_allow_html=True)
 
-    # --- HTML for Print Button ---
-    print_button_html = """
-    <button onclick="window.print()" style="padding: 8px 16px; font-weight: 600; border-radius: 8px; border: 1px solid #003366; background-color: #FFFFFF; color: #003366; cursor: pointer; margin-left: 10px;">
-        🖨️ Print Report
-    </button>
-    """
-
-    # --- Report Layout ---
     with st.container():
         st.markdown('<div class="report-container">', unsafe_allow_html=True)
 
-        # 1. Header
-        with st.container():
-            c1, c2 = st.columns([3, 1])
-            with c1:
-                st.markdown(
-                    '<div class="report-header"><h1>Parkinson\'s Tremor Analysis Report</h1><h3>Confidential Clinical Data</h3></div>',
-                    unsafe_allow_html=True)
-            with c2:
-                st.markdown('<div class="report-controls">', unsafe_allow_html=True)
-                if st.button("⬅️ Back to Dashboard", use_container_width=True):
-                    st.session_state.viewing_report = False
-                    st.session_state.report_data = None
-                    st.rerun()
-                st.markdown(print_button_html, unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+        # --- Report Header and Controls ---
+        c1, c2 = st.columns([3, 2])
+        with c1:
+            st.markdown('<h1>Movement Analysis Report</h1>', unsafe_allow_html=True)
+        with c2:
+            st.markdown('<div class="report-controls">', unsafe_allow_html=True)
+            if st.button("⬅️ Back to Dashboard"):
+                st.session_state.viewing_report = False
+                st.session_state.report_data = None
+                st.rerun()
+            st.markdown('<button onclick="window.print()">🖨️ Print / Save as PDF</button>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
-        # 2. Patient Information
-        with st.container():
-            st.markdown("<h3>Patient & Session Information</h3>", unsafe_allow_html=True)
-            with st.container(border=True):
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Patient ID", patient_details.get('patient_id', 'N/A'))
-                c2.metric("Recording Date", patient_details.get('timestamp', 'N/A').split(" ")[0])
-                c3.metric("Analysis Window", window_str)
-                c4.metric("Report Generated", datetime.now().strftime('%Y-%m-%d'))
+        # --- Patient & Session Information ---
+        st.markdown("<h2>Patient & Session Information</h2>", unsafe_allow_html=True)
+        with st.container(border=True):
+            cols = st.columns(4)
+            cols[0].metric("Patient ID", patient_details.get('patient_id', 'N/A'))
+            cols[1].metric("Recording Date", patient_details.get('timestamp', 'N/A').split(" ")[0])
+            cols[2].metric("Analysis Window", window_str)
+            cols[3].metric("Report Generated", datetime.now().strftime('%Y-%m-%d'))
 
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        # 3. Key Findings & Gauge
-        st.markdown("<h3>Key Findings</h3>", unsafe_allow_html=True)
+        # --- Key Findings & Gauge ---
+        st.markdown("<h2>Key Findings & Severity</h2>", unsafe_allow_html=True)
         with st.container(border=True):
             col1, col2 = st.columns([1.5, 1])
             with col1:
@@ -577,50 +562,47 @@ def display_report_page():
                 fig_gauge.update_layout(height=250, margin=dict(t=80, b=20), template='plotly_white')
                 st.plotly_chart(fig_gauge, use_container_width=True)
 
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        # 4. Graphical Analysis
-        st.markdown("<h3>Graphical Analysis</h3>", unsafe_allow_html=True)
+        # --- Graphical Analysis ---
+        st.markdown("<h2>Graphical Analysis</h2>", unsafe_allow_html=True)
         with st.container(border=True):
             c1, c2 = st.columns(2)
             with c1:
-                st.markdown("<h5>Time-Series Movement</h5>", unsafe_allow_html=True)
+                st.subheader("Time-Series Movement")
                 fig_ts = go.Figure()
                 fig_ts.add_trace(go.Scatter(x=df['time_s'], y=df['total_mag'], mode='lines', name='Raw Hand'))
                 fig_ts.add_trace(go.Scatter(x=df['time_s'], y=df['total_mag_stable'], mode='lines', name='Stabilized'))
-                fig_ts.update_layout(xaxis_title="Time (s)", yaxis_title="Acceleration Magnitude",
-                                     template='plotly_white',
+                fig_ts.update_layout(xaxis_title="Time (s)", yaxis_title="Acceleration", template='plotly_white',
                                      legend=dict(orientation="h", yanchor="top", y=1.15, xanchor="left", x=0))
                 st.plotly_chart(fig_ts, use_container_width=True)
             with c2:
-                st.markdown("<h5>Frequency Spectrum (FFT)</h5>", unsafe_allow_html=True)
+                st.subheader("Frequency Spectrum")
                 fig_fft = px.bar(fft_df, x='Frequency (Hz)', y='Power', log_y=True)
                 fig_fft.add_vrect(x0=3, x1=7, fillcolor="rgba(255,0,0,0.15)", line_width=0, annotation_text="PD Band")
                 fig_fft.update_xaxes(range=[0, 25])
                 fig_fft.update_layout(template='plotly_white')
                 st.plotly_chart(fig_fft, use_container_width=True)
 
-        # 5. Detailed Metrics Table
-        st.markdown("<h3>Detailed Clinical Metrics</h3>", unsafe_allow_html=True)
+        # --- Detailed Metrics Table ---
+        st.markdown("<h2>Detailed Clinical Metrics</h2>", unsafe_allow_html=True)
         with st.container(border=True):
             metrics_df = pd.DataFrame({
                 "Metric": ["RMS Power", "Peak Frequency", "Power in 3–7 Hz", "RMS Jerk", "Stabilizer Effectiveness",
                            "Spectral Entropy", "Crest Factor"],
                 "Value": [f"{metrics['rms_tremor']:.0f}", f"{metrics['peak_freq']:.2f} Hz",
                           f"{metrics['band_power_3_7_ratio']:.1f}%", f"{metrics['rms_jerk'] / 1000:.1f}k",
-                          f"{metrics['effectiveness']:.1f}%", f"{metrics['spectral_entropy']:.2f}",
-                          f"{metrics['crest_factor']:.2f}"],
+                          f"{metrics['effectiveness']:.1f}%", f"{metrics['crest_factor']:.2f}",
+                          f"{metrics['spectral_entropy']:.2f}"],
                 "Description": ["Overall intensity of the tremor.", "The most dominant frequency component.",
                                 "Percentage of tremor power in the typical PD range.",
-                                "A measure of the movement's smoothness (lower is smoother).",
+                                "A measure of the movement's smoothness.",
                                 "Reduction in tremor amplitude by the device.",
-                                "Measure of the tremor's randomness or unpredictability.",
-                                "Ratio of peak to average power, indicating spikiness."]
+                                "Ratio of peak to average power, indicating spikiness.",
+                                "Measure of the tremor's randomness."]
             })
             st.table(metrics_df.set_index("Metric"))
 
         st.markdown(
-            '<p class="report-footer">This report was automatically generated. For diagnostic purposes, please consult a qualified medical professional.</p>',
+            '<br><hr><p style="text-align: center; font-size: 10pt; color: #888;">This report is for informational purposes only. Consult a qualified medical professional for diagnosis.</p>',
             unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -630,7 +612,6 @@ placeholder = st.empty()
 analysis_result_for_display = None
 
 with st.sidebar:
-    # Hide sidebar controls when viewing the report for a cleaner print view
     if not st.session_state.viewing_report:
         st.title("Dashboard Controls")
         st.session_state.mode = st.radio("Select Mode", ('Live', 'Playback'), horizontal=True,
@@ -669,7 +650,7 @@ with st.sidebar:
             st.metric("Data Rate", f"{st.session_state.last_data_rate:.1f} KB/s")
             st.progress(success_rate / 100, text=f"Success Rate : {success_rate:.1f}%")
 
-        else:  # Playback Mode
+        else:
             st.header("Playback Controls");
             st.session_state.is_running = False
             if st.session_state.selected_recording_id is None:
@@ -681,7 +662,7 @@ with st.sidebar:
                 else:
                     options = {rec_id: f"{details['patient_id']} - {details['timestamp']}" for rec_id, details in
                                st.session_state.recordings_list.items()}
-                    selection = st.selectbox("Choose a recording to analyze", options=options.keys(),
+                    selection = st.selectbox("Choose a recording", options=options.keys(),
                                              format_func=lambda rec_id: options[rec_id], index=None,
                                              placeholder="Select a recording...")
                     if selection: st.session_state.selected_recording_id = selection; st.rerun()
@@ -716,10 +697,10 @@ with st.sidebar:
                     st.write(f"**Viewing:** `{start_time:.1f}s - {end_time:.1f}s` of `{total_duration:.1f}s` total.")
                     if total_duration and isinstance(total_duration, (int, float)) and total_duration > 2.0:
                         col1, col2 = st.columns(2)
-                        if col1.button("Previous Window", use_container_width=True,
+                        if col1.button("⬅️ Previous", use_container_width=True,
                                        disabled=bool(start_time <= 0)): st.session_state.current_window_start = max(0.0,
                                                                                                                     st.session_state.current_window_start - 2.0); st.rerun()
-                        if col2.button("Next Window", use_container_width=True, disabled=bool(
+                        if col2.button("Next ➡️", use_container_width=True, disabled=bool(
                             end_time >= total_duration)): st.session_state.current_window_start = min(
                             total_duration - 2.0, st.session_state.current_window_start + 2.0); st.rerun()
                     st.divider()
@@ -737,12 +718,12 @@ with st.sidebar:
                         st.info("No data in this window to generate a report.")
                     st.divider()
                     st.subheader("Session Control")
-                    if st.button("Stop Playback (Back to List)", use_container_width=True):
+                    if st.button("Stop Playback", use_container_width=True):
                         keys_to_reset = ['selected_recording_id', 'full_playback_df', 'current_window_analysis'];
                         [st.session_state.pop(key, None) for key in keys_to_reset];
                         st.rerun()
                     with st.expander("⚠️ Delete this recording"):
-                        st.warning("This action is permanent and cannot be undone.")
+                        st.warning("This action is permanent.")
                         if st.button("Confirm Deletion", use_container_width=True, type="primary"):
                             if delete_recording_from_firebase(st.session_state.selected_recording_id, FIREBASE_URL,
                                                               DB_SECRET):
@@ -812,11 +793,9 @@ else:
         elif st.session_state.selected_recording_id is None:
             placeholder.info("Select a recording from the sidebar to begin playback and analysis.")
 
-    # --- Footer for Dashboard ---
     st.markdown(
         """<div style='background-color: #0e1117; color: #4f4f4f; text-align: center; padding: 15px; font-size: 14px; margin-top: 50px; width: 100%; border-top: 1px solid #4f4f4f;'><b>Project:</b> Vibration Analyzed Smart Glove to Aid Parkinson's Patient Hand Tremor with Postural Stability<br><b>Team:</b> 22LE1-035 S.A.P.U.Hemachandra | 22LE2-082 I.H.C.Udayanga | <b>Group:</b> B 07-18<br><b>Supervisor:</b> Mr. Nuwan Attanayake</div>""",
         unsafe_allow_html=True)
-    # --- Auto-Refresh Logic ---
     if st.session_state.is_running and st.session_state.mode == 'Live':
         time.sleep(st.session_state.get('live_refresh_interval', 5));
         st.rerun()
