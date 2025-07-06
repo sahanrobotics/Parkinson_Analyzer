@@ -594,4 +594,4 @@ if st.session_state.is_running:
     time.sleep(refresh_interval)
     st.rerun()
 else:
-    placeholder.info("Auto-refresh is paused. Enable it in the sidebar to see live data.")
+    placeholder.info("Auto-refresh is paused. Enable it in the sidebar to see live data.") 
