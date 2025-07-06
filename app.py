@@ -204,7 +204,7 @@ def perform_advanced_analysis(data):
         weights = st.session_state;
         weight_sum = weights.w_rms + weights.w_freq + weights.w_jerk
         composite_index = (
-                                      weights.w_rms * norm_rms + weights.w_freq * norm_power_ratio + weights.w_jerk * norm_jerk) / weight_sum if weight_sum > 0 else 0
+                                  weights.w_rms * norm_rms + weights.w_freq * norm_power_ratio + weights.w_jerk * norm_jerk) / weight_sum if weight_sum > 0 else 0
         f_spec, t_spec, Sxx = spectrogram(df['total_mag'], fs);
         peak_freq_idx = np.argmax(power_spectrum)
         peak_freq = xf[peak_freq_idx] if peak_freq_idx < len(xf) else 0
@@ -221,7 +221,7 @@ def perform_advanced_analysis(data):
         correlation_matrix = df[['ax1', 'ay1', 'az1']].corr()
         metrics = {"rms_tremor": rms_tremor, "stage": classify_stage_by_index(composite_index), "sampling_freq": fs,
                    "effectiveness": (1 - (
-                               np.sqrt(np.mean(df['total_mag_stable'] ** 2)) / rms_tremor)) * 100 if rms_tremor > 0 else 0,
+                           np.sqrt(np.mean(df['total_mag_stable'] ** 2)) / rms_tremor)) * 100 if rms_tremor > 0 else 0,
                    "rms_jerk": rms_jerk, "power_in_band_ratio": power_in_band_ratio_4_8 * 100,
                    "spectral_entropy": spectral_entropy_val, "composite_index": composite_index, "peak_freq": peak_freq,
                    "band_power_3_7_ratio": power_in_band_ratio_3_7 * 100, "sma": sma, "std_dev_axes": std_dev_axes,
@@ -231,6 +231,7 @@ def perform_advanced_analysis(data):
         # This catch-all makes the function robust against unexpected data formats or processing errors
         st.warning(f"Data analysis failed. This can happen with incomplete or corrupt data segments. Error: {e}")
         return None
+
 
 # --- HELPER & UI FUNCTIONS (Unchanged) ---
 def classify_stage_by_index(index):
@@ -390,9 +391,10 @@ def display_dashboard(df, metrics, fft_df, spec_data, corr_matrix, display_info,
          "Component Details", "Raw Data"])
 
     with tabs[0]:
-        st.subheader(f"Hand Movments vs Stabalizer: {current_window or 'Live Data'}")
+        # FIX: Corrected typo in subheader
+        st.subheader(f"Hand Movements vs Stabilizer: {current_window or 'Live Data'}")
         st.info(
-            "This chart compares the RAW hand tremor with the movement of the Stabilized spoon . Effective stabilization should show a significantly smaller amplitude for the cyan line (Spoon).")
+            "This chart compares the RAW hand tremor with the movement of the Stabilized spoon. Effective stabilization should show a significantly smaller amplitude for the cyan line (Spoon).")
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=df['time_s'], y=df['total_mag'], mode='lines', name='Raw Hand (Sensor 1)',
                                  line=dict(color='orange')))
@@ -514,7 +516,7 @@ def display_dashboard(df, metrics, fft_df, spec_data, corr_matrix, display_info,
         st.dataframe(df[display_cols].style.format("{:.3f}"), use_container_width=True)
 
 
-# --- SIDEBAR & MAIN LOGIC (with button emojis removed) ---
+# --- SIDEBAR & MAIN LOGIC ---
 placeholder = st.empty()
 analysis_result_for_display = None
 
@@ -551,11 +553,17 @@ with st.sidebar:
         st.divider()
         st.header("Connection Health")
         total_req = st.session_state.connection_successes + st.session_state.connection_failures
-        success_rate = 100-((st.session_state.connection_successes / total_req * 100) if total_req > 0 else 100)
+        # FIX: Correctly calculate and display packet loss
+        if total_req > 0:
+            success_rate = (st.session_state.connection_successes / total_req) * 100
+            packet_loss_rate = 100 - success_rate
+        else:
+            packet_loss_rate = 0.0
+
         st.metric("Last Fetch", st.session_state.last_conn_status)
         st.metric("Latency", f"{st.session_state.last_latency:.2f} s")
         st.metric("Data Rate", f"{st.session_state.last_data_rate:.1f} KB/s")
-        st.progress(int(success_rate), text=f"Packet Loss : {success_rate:.1f}%")
+        st.progress(int(packet_loss_rate), text=f"Packet Loss: {packet_loss_rate:.1f}%")
 
     else:  # Playback Mode
         st.header("Playback Controls");
@@ -581,8 +589,9 @@ with st.sidebar:
                     recording_data = get_specific_recording(st.session_state.selected_recording_id, FIREBASE_URL,
                                                             DB_SECRET)
                     if recording_data and 'data' in recording_data:
-                        df, metrics, _, _, _ = perform_advanced_analysis(recording_data['data'])
-                        if df is not None:
+                        analysis_results = perform_advanced_analysis(recording_data['data'])
+                        if analysis_results is not None:
+                            df, metrics, _, _, _ = analysis_results
                             st.session_state.full_playback_df = df
                             st.session_state.total_duration = metrics.get('duration', 0);
                             st.session_state.current_window_start = 0.0
@@ -600,7 +609,7 @@ with st.sidebar:
                 end_time = start_time + 2.0
                 window_df_raw = st.session_state.full_playback_df[
                     (st.session_state.full_playback_df['time_s'] >= start_time) & (
-                                st.session_state.full_playback_df['time_s'] < end_time)]
+                            st.session_state.full_playback_df['time_s'] < end_time)]
                 window_data_as_list = window_df_raw.to_dict('records')
                 st.session_state.current_window_analysis = perform_advanced_analysis(window_data_as_list)
                 analysis_result_for_display = st.session_state.current_window_analysis
@@ -609,10 +618,12 @@ with st.sidebar:
                 st.write(f"**Viewing:** `{start_time:.1f}s - {end_time:.1f}s` of `{total_duration:.1f}s` total.")
                 if total_duration > 2.0:
                     col1, col2 = st.columns(2)
-                    if col1.button("Previous Window", use_container_width=True, disabled=(start_time <= 0)):
+                    # FIX: Cast numpy.bool_ to Python bool to prevent TypeError
+                    if col1.button("Previous Window", use_container_width=True, disabled=bool(start_time <= 0)):
                         st.session_state.current_window_start = max(0.0, st.session_state.current_window_start - 2.0);
                         st.rerun()
-                    if col2.button("Next Window", use_container_width=True, disabled=(end_time >= total_duration)):
+                    # FIX: Cast numpy.bool_ to Python bool to prevent TypeError
+                    if col2.button("Next Window", use_container_width=True, disabled=bool(end_time >= total_duration)):
                         st.session_state.current_window_start = min(total_duration - 2.0,
                                                                     st.session_state.current_window_start + 2.0);
                         st.rerun()
