@@ -803,6 +803,8 @@ else:  # Playback mode
     else:
         pass
 
+
+#Bug Fix
     # --- Footer ---
 st.markdown("""
     <div style='background-color: #0e1117; color: #4f4f4f; text-align: center; padding: 15px; font-size: 14px; margin-top: 50px; width: 100%; border-top: 1px solid #4f4f4f;'>
