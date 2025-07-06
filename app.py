@@ -1,4 +1,4 @@
-# pip install streamlit requests numpy pandas plotly scipy kaleido
+# pip install streamlit requests numpy pandas plotly scipy
 
 import streamlit as st
 import requests
@@ -12,7 +12,6 @@ from scipy.fft import rfft, rfftfreq
 from scipy.signal import spectrogram
 from scipy.stats import entropy
 from requests.exceptions import RequestException
-import base64  # Needed for embedding images in the HTML report
 
 # --- Page Configuration and Custom CSS ---
 st.set_page_config(
@@ -65,6 +64,8 @@ def init_session_state():
         'total_duration': 0.0,
         'current_window_analysis': None,
         'is_recording': False, 'recorded_data_buffer': [], 'last_recorded_id': -1,
+        'viewing_report': False,  # Controls if the report view is active
+        'report_data': None  # Stores data for the report view
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -125,7 +126,6 @@ def get_recordings_list(URL, KEY):
         r.raise_for_status()
         full_data = r.json()
         if not full_data: return {}
-        # This part is now safer against malformed data from Firebase
         recordings = {
             rec_id: {"patient_id": details.get("patient_id", "N/A"), "timestamp": details.get("timestamp", "N/A")} for
             rec_id, details in full_data.items() if isinstance(details, dict)}
@@ -204,7 +204,7 @@ def perform_advanced_analysis(data):
         weights = st.session_state;
         weight_sum = weights.w_rms + weights.w_freq + weights.w_jerk
         composite_index = (
-                                      weights.w_rms * norm_rms + weights.w_freq * norm_power_ratio + weights.w_jerk * norm_jerk) / weight_sum if weight_sum > 0 else 0
+                                  weights.w_rms * norm_rms + weights.w_freq * norm_power_ratio + weights.w_jerk * norm_jerk) / weight_sum if weight_sum > 0 else 0
         f_spec, t_spec, Sxx = spectrogram(df['total_mag'], fs);
         peak_freq_idx = np.argmax(power_spectrum)
         peak_freq = xf[peak_freq_idx] if peak_freq_idx < len(xf) else 0
@@ -221,18 +221,18 @@ def perform_advanced_analysis(data):
         correlation_matrix = df[['ax1', 'ay1', 'az1']].corr()
         metrics = {"rms_tremor": rms_tremor, "stage": classify_stage_by_index(composite_index), "sampling_freq": fs,
                    "effectiveness": (1 - (
-                               np.sqrt(np.mean(df['total_mag_stable'] ** 2)) / rms_tremor)) * 100 if rms_tremor > 0 else 0,
+                           np.sqrt(np.mean(df['total_mag_stable'] ** 2)) / rms_tremor)) * 100 if rms_tremor > 0 else 0,
                    "rms_jerk": rms_jerk, "power_in_band_ratio": power_in_band_ratio_4_8 * 100,
                    "spectral_entropy": spectral_entropy_val, "composite_index": composite_index, "peak_freq": peak_freq,
                    "band_power_3_7_ratio": power_in_band_ratio_3_7 * 100, "sma": sma, "std_dev_axes": std_dev_axes,
                    "crest_factor": crest_factor, "zcr": zcr_total, "duration": duration}
         return df, metrics, fft_df, (f_spec, t_spec, Sxx), correlation_matrix
     except Exception as e:
-        # This catch-all makes the function robust against unexpected data formats or processing errors
         st.warning(f"Data analysis failed. This can happen with incomplete or corrupt data segments. Error: {e}")
         return None
 
-# --- HELPER & UI FUNCTIONS (Unchanged) ---
+
+# --- HELPER & UI FUNCTIONS ---
 def classify_stage_by_index(index):
     if index < st.session_state.stage1_idx:
         return "Stage 0/1 Mild"
@@ -244,12 +244,12 @@ def classify_stage_by_index(index):
         return "Stage 4 Critical"
 
 
-def create_metric_box(title, value,
-                      help_text=""): return f"""<div class="metric-box" title="{help_text}"><p>{value}</p><h4>{title}</h4></div>"""
+def create_metric_box(title, value, help_text=""):
+    return f"""<div class="metric-box" title="{help_text}"><p>{value}</p><h4>{title}</h4></div>"""
 
 
-def create_clinical_metric(label, value,
-                           help_text=""): return f"""<div class="clinical-metric" title="{help_text}"><div class="label">{label}</div><div class="value">{value}</div></div>"""
+def create_clinical_metric(label, value, help_text=""):
+    return f"""<div class="clinical-metric" title="{help_text}"><div class="label">{label}</div><div class="value">{value}</div></div>"""
 
 
 def format_stage_with_color(stage_string):
@@ -259,195 +259,7 @@ def format_stage_with_color(stage_string):
     return f"<span style='color: #333;'>{stage_string}</span>"
 
 
-import base64
-from datetime import datetime
-import plotly.graph_objects as go
-import plotly.express as px
-
-def generate_html_report(window_analysis, patient_details, window_str):
-    """Generates a modern, mobile-friendly HTML report with base64 images."""
-    import base64
-    from datetime import datetime
-    df, metrics, fft_df, _, _ = window_analysis
-    FAILURE_PLACEHOLDER = "IMAGE_GENERATION_FAILED"
-
-    def fig_to_base64(fig):
-        try:
-            img_bytes = fig.to_image(format="png", scale=2)
-            if not img_bytes:
-                raise ValueError("fig.to_image() returned None")
-            return base64.b64encode(img_bytes).decode()
-        except Exception as e:
-            print(f"[ERROR] Kaleido rendering failed: {e}")
-            return FAILURE_PLACEHOLDER
-
-    # --- Figures ---
-    fig_gauge = go.Figure(go.Indicator(
-        mode="gauge+number", value=metrics['composite_index'], number={'valueformat': '.2f'},
-        domain={'x': [0, 1], 'y': [0, 1]}, title={'text': f"Severity Index ({metrics['stage']})"},
-        gauge={
-            'axis': {'range': [0, 1]}, 'bar': {'color': "gray"},
-            'steps': [
-                {'range': [0, 0.3], 'color': '#a5d6a7'}, {'range': [0.3, 0.5], 'color': '#fff59d'},
-                {'range': [0.5, 0.7], 'color': '#ffcc80'}, {'range': [0.7, 1.0], 'color': '#ef9a9a'}
-            ]
-        }))
-    fig_gauge.update_layout(height=280, margin=dict(t=40, b=10))
-    gauge_b64 = fig_to_base64(fig_gauge)
-
-    fig_ts = go.Figure()
-    fig_ts.add_trace(go.Scatter(x=df['time_s'], y=df['total_mag'], mode='lines', name='Raw Hand'))
-    fig_ts.add_trace(go.Scatter(x=df['time_s'], y=df['total_mag_stable'], mode='lines', name='Stabilized Spoon'))
-    fig_ts.update_layout(xaxis_title="Time (s)", yaxis_title="Acceleration Magnitude", height=350)
-    ts_b64 = fig_to_base64(fig_ts)
-
-    fig_fft = px.bar(fft_df, x='Frequency (Hz)', y='Power', log_y=True, title="Frequency Spectrum")
-    fig_fft.add_vrect(x0=3, x1=7, fillcolor="red", opacity=0.2, line_width=0, annotation_text="PD Band")
-    fig_fft.update_xaxes(range=[0, 25])
-    fig_fft.update_layout(height=350)
-    fft_b64 = fig_to_base64(fig_fft)
-
-    def img_or_error(b64, label):
-        if b64 == FAILURE_PLACEHOLDER:
-            return f'<div class="error"><strong>⚠ Failed to load "{label}" chart.</strong></div>'
-        return f'<img src="data:image/png;base64,{b64}" alt="{label}">'
-
-    summary = (
-        f"<b>{metrics['stage']}</b> stage tremor detected in <b>{window_str}</b> window. "
-        f"RMS: <b>{metrics['rms_tremor']:.0f}</b>, Peak Freq: <b>{metrics['peak_freq']:.2f} Hz</b>, "
-        f"Stabilizer Efficiency: <b>{metrics['effectiveness']:.1f}%</b>."
-    )
-
-    metric_table = "".join([
-        f"<tr><td>{label}</td><td>{val}</td></tr>" for label, val in [
-            ("RMS Power", f"{metrics['rms_tremor']:.0f}"),
-            ("Peak Frequency", f"{metrics['peak_freq']:.2f} Hz"),
-            ("Power in 3–7 Hz", f"{metrics['band_power_3_7_ratio']:.1f}%"),
-            ("RMS Jerk", f"{metrics['rms_jerk'] / 1000:.1f}k"),
-            ("Effectiveness", f"{metrics['effectiveness']:.1f}%"),
-            ("Spectral Entropy", f"{metrics['spectral_entropy']:.2f}")
-        ]
-    ])
-
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    html = f"""
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><title>Report: {window_str}</title>
-<style>
-  body {{
-    font-family: 'Segoe UI', Roboto, sans-serif;
-    background: #f2f4f7;
-    margin: 0; padding: 0;
-  }}
-  .container {{
-    max-width: 960px;
-    margin: auto;
-    padding: 2rem;
-  }}
-  .card {{
-    background: #fff;
-    border-radius: 12px;
-    box-shadow: 0 6px 12px rgba(0,0,0,0.06);
-    padding: 1.5rem 2rem;
-    margin-bottom: 2rem;
-  }}
-  h1, h2 {{
-    color: #333;
-    border-bottom: 2px solid #eee;
-    padding-bottom: 0.5rem;
-  }}
-  .info {{
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-  }}
-  .info div {{
-    flex: 1;
-    min-width: 200px;
-    background: #f9fafb;
-    padding: 0.8rem 1rem;
-    border-radius: 8px;
-    border-left: 4px solid #4a90e2;
-  }}
-  table {{
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 1rem;
-  }}
-  td {{
-    padding: 10px;
-    border-bottom: 1px solid #eee;
-  }}
-  tr:hover {{ background: #f7f7f7; }}
-  img {{
-    width: 100%;
-    max-width: 800px;
-    margin-top: 1rem;
-    border-radius: 8px;
-    border: 1px solid #ddd;
-  }}
-  .footer {{
-    text-align: center;
-    font-size: 0.9em;
-    color: #999;
-    margin-top: 3rem;
-  }}
-  .error {{
-    color: red;
-    background: #fff4f4;
-    border: 1px solid red;
-    padding: 10px;
-    margin-top: 1rem;
-    border-radius: 6px;
-  }}
-</style></head>
-<body>
-  <div class="container">
-    <div class="card">
-      <h1>Parkinson's Tremor Report</h1>
-      <div class="info">
-        <div><strong>Patient ID:</strong><br>{patient_details.get('patient_id', 'N/A')}</div>
-        <div><strong>Date:</strong><br>{patient_details.get('timestamp', 'N/A')}</div>
-        <div><strong>Window:</strong><br>{window_str}</div>
-        <div><strong>Generated:</strong><br>{now}</div>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>1. Summary</h2>
-      <p>{summary}</p>
-    </div>
-
-    <div class="card">
-      <h2>2. Severity Gauge</h2>
-      {img_or_error(gauge_b64, "Severity Gauge")}
-    </div>
-
-    <div class="card">
-      <h2>3. Clinical Metrics</h2>
-      <table>{metric_table}</table>
-    </div>
-
-    <div class="card">
-      <h2>4. Time-Series Movement</h2>
-      {img_or_error(ts_b64, "Time-Series")}
-    </div>
-
-    <div class="card">
-      <h2>5. Frequency Spectrum</h2>
-      {img_or_error(fft_b64, "Frequency Spectrum")}
-    </div>
-
-    <div class="footer">
-      This report was auto-generated for research/clinical review. Consult a specialist for diagnosis.
-    </div>
-  </div>
-</body>
-</html>
-"""
-    return html
-
-# --- MAIN DASHBOARD DISPLAY (Unchanged) ---
+# --- MAIN DASHBOARD DISPLAY ---
 def display_dashboard(df, metrics, fft_df, spec_data, corr_matrix, display_info, current_window=None):
     st.title("Advanced Parkinson's Movement Analyzer")
 
@@ -619,228 +431,327 @@ def display_dashboard(df, metrics, fft_df, spec_data, corr_matrix, display_info,
         st.dataframe(df[display_cols].style.format("{:.3f}"), use_container_width=True)
 
 
-# --- SIDEBAR & MAIN LOGIC (with button emojis removed) ---
+# --- NEW FUNCTION TO DISPLAY THE REPORT IN-APP ---
+def display_report_page():
+    """Renders a report view directly in the Streamlit app, avoiding Kaleido."""
+    report_info = st.session_state.report_data
+    if not report_info:
+        st.error("No report data found. Returning to dashboard.")
+        st.session_state.viewing_report = False
+        st.rerun()
+
+    window_analysis = report_info['analysis']
+    patient_details = report_info['details']
+    window_str = report_info['window_str']
+
+    df, metrics, fft_df, _, _ = window_analysis
+
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.title("Parkinson's Tremor Report")
+    with col2:
+        if st.button("⬅️ Back to Dashboard", use_container_width=True):
+            st.session_state.viewing_report = False
+            st.session_state.report_data = None
+            st.rerun()
+
+    st.markdown("---")
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Patient ID", patient_details.get('patient_id', 'N/A'))
+    c2.metric("Recorded On", patient_details.get('timestamp', 'N/A').split(" ")[0])
+    c3.metric("Analysis Window", window_str)
+    c4.metric("Generated On", datetime.now().strftime('%Y-%m-%d'))
+    st.markdown("---")
+
+    st.subheader("1. Summary & Severity Index")
+    summary_col, gauge_col = st.columns([1, 1])
+    with summary_col:
+        summary_text = (
+            f"An analysis of the **{window_str}** window revealed a tremor classified as **{metrics['stage']}**. "
+            f"The tremor's root mean square (RMS) power was **{metrics['rms_tremor']:.0f} units**, with a dominant peak frequency at **{metrics['peak_freq']:.2f} Hz**. "
+            f"The hardware stabilizer demonstrated an efficiency of **{metrics['effectiveness']:.1f}%** in reducing this tremor."
+        )
+        st.success(f"**Stage:** {metrics['stage']}")
+        st.info(f"**Key Finding:** {summary_text}")
+
+    with gauge_col:
+        fig_gauge = go.Figure(go.Indicator(
+            mode="gauge+number", value=metrics['composite_index'], number={'valueformat': '.2f'},
+            domain={'x': [0, 1], 'y': [0, 1]}, title={'text': f"Composite Severity Index"},
+            gauge={
+                'axis': {'range': [0, 1]}, 'bar': {'color': "gray"},
+                'steps': [
+                    {'range': [0, 0.3], 'color': '#a5d6a7'}, {'range': [0.3, 0.5], 'color': '#fff59d'},
+                    {'range': [0.5, 0.7], 'color': '#ffcc80'}, {'range': [0.7, 1.0], 'color': '#ef9a9a'}
+                ]}))
+        fig_gauge.update_layout(height=280, margin=dict(t=50, b=20))
+        st.plotly_chart(fig_gauge, use_container_width=True)
+
+    st.markdown("---")
+
+    st.subheader("2. Graphical Analysis")
+    chart_col1, chart_col2 = st.columns(2)
+    with chart_col1:
+        st.markdown("**Time-Series Movement**")
+        fig_ts = go.Figure()
+        fig_ts.add_trace(go.Scatter(x=df['time_s'], y=df['total_mag'], mode='lines', name='Raw Hand Motion'))
+        fig_ts.add_trace(go.Scatter(x=df['time_s'], y=df['total_mag_stable'], mode='lines', name='Stabilized Output'))
+        fig_ts.update_layout(xaxis_title="Time (s)", yaxis_title="Acceleration Magnitude",
+                             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        st.plotly_chart(fig_ts, use_container_width=True)
+
+    with chart_col2:
+        st.markdown("**Frequency Spectrum (FFT)**")
+        fig_fft = px.bar(fft_df, x='Frequency (Hz)', y='Power', log_y=True)
+        fig_fft.add_vrect(x0=3, x1=7, fillcolor="red", opacity=0.2, line_width=0, annotation_text="PD Band")
+        fig_fft.update_xaxes(range=[0, 25])
+        st.plotly_chart(fig_fft, use_container_width=True)
+
+    st.markdown("---")
+
+    st.subheader("3. Detailed Clinical Metrics")
+    metrics_df = pd.DataFrame({
+        "Metric": ["RMS Power", "Peak Frequency", "Power in 3–7 Hz", "RMS Jerk", "Stabilizer Effectiveness",
+                   "Spectral Entropy"],
+        "Value": [f"{metrics['rms_tremor']:.0f}", f"{metrics['peak_freq']:.2f} Hz",
+                  f"{metrics['band_power_3_7_ratio']:.1f}%", f"{metrics['rms_jerk'] / 1000:.1f}k",
+                  f"{metrics['effectiveness']:.1f}%", f"{metrics['spectral_entropy']:.2f}"]
+    })
+    st.table(metrics_df)
+
+    st.info("You can use your browser's print functionality (Ctrl+P or Cmd+P) to save this report as a PDF.")
+
+
+# --- SIDEBAR & MAIN LOGIC ---
 placeholder = st.empty()
 analysis_result_for_display = None
 
 with st.sidebar:
     st.title("Dashboard Controls")
-    st.session_state.mode = st.radio("Select Mode", ('Live', 'Playback'), horizontal=True,
-                                     help="Choose 'Live' to see real-time data or 'Playback' to review saved recordings.")
-    st.divider()
-    if st.session_state.mode == 'Live':
-        st.header("Live Dashboard Settings")
-        st.session_state.is_running = st.toggle("Enable Auto-Refresh", value=True,
-                                                disabled=st.session_state.is_recording)
-        refresh_interval = st.slider("Update Interval (seconds)", 2, 15, 2, key="live_refresh_interval")
-
-        with st.expander("Continuous Recording", expanded=True):
-            st.session_state.patient_id_input = st.text_input("Patient ID", value=st.session_state.patient_id_input,
-                                                              disabled=st.session_state.is_recording)
-            if not st.session_state.is_recording:
-                if st.button("Start Recording", use_container_width=True, type="primary"):
-                    st.session_state.is_recording = True;
-                    st.session_state.recorded_data_buffer = [];
-                    st.session_state.last_recorded_id = -1;
-                    st.rerun()
-            else:
-                st.info(f"🔴 Recording... | {len(st.session_state.recorded_data_buffer)} data points")
-                if st.button("Stop & Save Recording", use_container_width=True):
-                    st.session_state.is_recording = False
-                    save_recording_to_firebase(st.session_state.patient_id_input,
-                                               f"rec-upto-{st.session_state.last_recorded_id}",
-                                               st.session_state.recorded_data_buffer, FIREBASE_URL, DB_SECRET)
-                    st.session_state.recorded_data_buffer = [];
-                    st.rerun()
-
+    # Hide sidebar controls when viewing report to prevent interference
+    if not st.session_state.viewing_report:
+        st.session_state.mode = st.radio("Select Mode", ('Live', 'Playback'), horizontal=True,
+                                         help="Choose 'Live' to see real-time data or 'Playback' to review saved recordings.")
         st.divider()
-        st.header("Connection Health")
-        total_req = st.session_state.connection_successes + st.session_state.connection_failures
-        success_rate = 100-((st.session_state.connection_successes / total_req * 100) if total_req > 0 else 100)
-        st.metric("Last Fetch", st.session_state.last_conn_status)
-        st.metric("Latency", f"{st.session_state.last_latency:.2f} s")
-        st.metric("Data Rate", f"{st.session_state.last_data_rate:.1f} KB/s")
-        st.progress(int(success_rate), text=f"Packet Loss : {success_rate:.1f}%")
+        if st.session_state.mode == 'Live':
+            st.header("Live Dashboard Settings")
+            st.session_state.is_running = st.toggle("Enable Auto-Refresh", value=True,
+                                                    disabled=st.session_state.is_recording)
+            refresh_interval = st.slider("Update Interval (seconds)", 2, 15, 2, key="live_refresh_interval")
 
-    else:  # Playback Mode
-        st.header("Playback Controls");
-        st.session_state.is_running = False
-        if st.session_state.selected_recording_id is None:
-            st.info("Select a recording from the list below to begin playback and analysis.")
-            with st.spinner("Loading recordings..."):
-                st.session_state.recordings_list = get_recordings_list(FIREBASE_URL, DB_SECRET)
-            if not st.session_state.recordings_list:
-                st.warning("No recordings found.")
-            else:
-                options = {rec_id: f"{details['patient_id']} - {details['timestamp']}" for rec_id, details in
-                           st.session_state.recordings_list.items()}
-                selection = st.selectbox("Choose a recording to analyze", options=options.keys(),
-                                         format_func=lambda rec_id: options[rec_id], index=None,
-                                         placeholder="Select a recording...")
-                if selection:
-                    st.session_state.selected_recording_id = selection;
-                    st.rerun()
-        else:  # A recording is selected
-            if st.session_state.full_playback_df is None:
-                with st.spinner("Loading full recording data..."):
-                    recording_data = get_specific_recording(st.session_state.selected_recording_id, FIREBASE_URL,
-                                                            DB_SECRET)
-                    if recording_data and 'data' in recording_data:
-                        df, metrics, _, _, _ = perform_advanced_analysis(recording_data['data'])
-                        if df is not None:
-                            st.session_state.full_playback_df = df
-                            st.session_state.total_duration = metrics.get('duration', 0);
-                            st.session_state.current_window_start = 0.0
-                        else:
-                            st.error("Failed to process recording data.");
-                            st.session_state.selected_recording_id = None;
-                    else:
-                        st.error("Failed to load recording data.");
-                        st.session_state.selected_recording_id = None;
-                st.rerun()
-
-            if st.session_state.full_playback_df is not None:
-                total_duration = st.session_state.total_duration;
-                start_time = st.session_state.current_window_start;
-                end_time = start_time + 2.0
-                window_df_raw = st.session_state.full_playback_df[
-                    (st.session_state.full_playback_df['time_s'] >= start_time) & (
-                                st.session_state.full_playback_df['time_s'] < end_time)]
-                window_data_as_list = window_df_raw.to_dict('records')
-                st.session_state.current_window_analysis = perform_advanced_analysis(window_data_as_list)
-                analysis_result_for_display = st.session_state.current_window_analysis
-
-                st.subheader("Window Navigation")
-                st.write(f"**Viewing:** `{start_time:.1f}s - {end_time:.1f}s` of `{total_duration:.1f}s` total.")
-                if total_duration and isinstance(total_duration, (int, float)) and total_duration > 2.0:
-                    col1, col2 = st.columns(2)
-
-                    prev_disabled = bool(start_time <= 0)
-                    next_disabled = bool(end_time >= total_duration)
-
-                    if col1.button("Previous Window", use_container_width=True, disabled=prev_disabled):
-                        st.session_state.current_window_start = max(0.0, st.session_state.current_window_start - 2.0)
+            with st.expander("Continuous Recording", expanded=True):
+                st.session_state.patient_id_input = st.text_input("Patient ID", value=st.session_state.patient_id_input,
+                                                                  disabled=st.session_state.is_recording)
+                if not st.session_state.is_recording:
+                    if st.button("Start Recording", use_container_width=True, type="primary"):
+                        st.session_state.is_recording = True;
+                        st.session_state.recorded_data_buffer = [];
+                        st.session_state.last_recorded_id = -1;
                         st.rerun()
-
-                    if col2.button("Next Window", use_container_width=True, disabled=next_disabled):
-                        st.session_state.current_window_start = min(total_duration - 2.0,
-                                                                    st.session_state.current_window_start + 2.0)
-                        st.rerun()
-
-                st.divider()
-                st.subheader("Generate Report")
-                if st.session_state.current_window_analysis:
-                    window_str = f"{start_time:.1f}s - {end_time:.1f}s"
-                    html_report = generate_html_report(st.session_state.current_window_analysis,
-                                                       st.session_state.recordings_list[
-                                                           st.session_state.selected_recording_id], window_str)
-                    st.download_button(
-                        label=f"Download Report for {window_str}",
-                        data=html_report,
-                        file_name=f"Report_{st.session_state.recordings_list[st.session_state.selected_recording_id].get('patient_id', 'NA')}_Window_{window_str.replace('s - ', 'to').replace('s', '')}.html",
-                        mime="text/html", use_container_width=True
-                    )
                 else:
-                    st.info("No data in this window to generate a report.")
+                    st.info(f"🔴 Recording... | {len(st.session_state.recorded_data_buffer)} data points")
+                    if st.button("Stop & Save Recording", use_container_width=True):
+                        st.session_state.is_recording = False
+                        save_recording_to_firebase(st.session_state.patient_id_input,
+                                                   f"rec-upto-{st.session_state.last_recorded_id}",
+                                                   st.session_state.recorded_data_buffer, FIREBASE_URL, DB_SECRET)
+                        st.session_state.recorded_data_buffer = [];
+                        st.rerun()
 
-                st.divider()
-                st.subheader("Session Control")
-                if st.button("Stop Playback (Back to List)", use_container_width=True):
-                    keys_to_reset = ['selected_recording_id', 'full_playback_df', 'current_window_analysis']
-                    for key in keys_to_reset: st.session_state[key] = None
+            st.divider()
+            st.header("Connection Health")
+            total_req = st.session_state.connection_successes + st.session_state.connection_failures
+            success_rate = (st.session_state.connection_successes / total_req * 100) if total_req > 0 else 100
+            st.metric("Last Fetch", st.session_state.last_conn_status)
+            st.metric("Latency", f"{st.session_state.last_latency:.2f} s")
+            st.metric("Data Rate", f"{st.session_state.last_data_rate:.1f} KB/s")
+            st.progress(success_rate / 100, text=f"Success Rate : {success_rate:.1f}%")
+
+        else:  # Playback Mode
+            st.header("Playback Controls");
+            st.session_state.is_running = False
+            if st.session_state.selected_recording_id is None:
+                st.info("Select a recording from the list below to begin playback and analysis.")
+                with st.spinner("Loading recordings..."):
+                    st.session_state.recordings_list = get_recordings_list(FIREBASE_URL, DB_SECRET)
+                if not st.session_state.recordings_list:
+                    st.warning("No recordings found.")
+                else:
+                    options = {rec_id: f"{details['patient_id']} - {details['timestamp']}" for rec_id, details in
+                               st.session_state.recordings_list.items()}
+                    selection = st.selectbox("Choose a recording to analyze", options=options.keys(),
+                                             format_func=lambda rec_id: options[rec_id], index=None,
+                                             placeholder="Select a recording...")
+                    if selection:
+                        st.session_state.selected_recording_id = selection;
+                        st.rerun()
+            else:  # A recording is selected
+                if st.session_state.full_playback_df is None:
+                    with st.spinner("Loading full recording data..."):
+                        recording_data = get_specific_recording(st.session_state.selected_recording_id, FIREBASE_URL,
+                                                                DB_SECRET)
+                        if recording_data and 'data' in recording_data:
+                            df, metrics, _, _, _ = perform_advanced_analysis(recording_data['data'])
+                            if df is not None:
+                                st.session_state.full_playback_df = df
+                                st.session_state.total_duration = metrics.get('duration', 0);
+                                st.session_state.current_window_start = 0.0
+                            else:
+                                st.error("Failed to process recording data.");
+                                st.session_state.selected_recording_id = None;
+                        else:
+                            st.error("Failed to load recording data.");
+                            st.session_state.selected_recording_id = None;
                     st.rerun()
-                with st.expander("⚠️ Delete this recording"):
-                    st.warning("This action is permanent and cannot be undone.")
-                    if st.button("Confirm Deletion", use_container_width=True, type="primary"):
-                        if delete_recording_from_firebase(st.session_state.selected_recording_id, FIREBASE_URL,
-                                                          DB_SECRET):
-                            get_recordings_list.clear();
-                            keys_to_reset = ['selected_recording_id', 'full_playback_df', 'current_window_analysis']
-                            for key in keys_to_reset: st.session_state[key] = None
+
+                if st.session_state.full_playback_df is not None:
+                    total_duration = st.session_state.total_duration;
+                    start_time = st.session_state.current_window_start;
+                    end_time = start_time + 2.0
+                    window_df_raw = st.session_state.full_playback_df[
+                        (st.session_state.full_playback_df['time_s'] >= start_time) & (
+                                st.session_state.full_playback_df['time_s'] < end_time)]
+                    window_data_as_list = window_df_raw.to_dict('records')
+                    st.session_state.current_window_analysis = perform_advanced_analysis(window_data_as_list)
+                    analysis_result_for_display = st.session_state.current_window_analysis
+
+                    st.subheader("Window Navigation")
+                    st.write(f"**Viewing:** `{start_time:.1f}s - {end_time:.1f}s` of `{total_duration:.1f}s` total.")
+                    if total_duration and isinstance(total_duration, (int, float)) and total_duration > 2.0:
+                        col1, col2 = st.columns(2)
+
+                        prev_disabled = bool(start_time <= 0)
+                        next_disabled = bool(end_time >= total_duration)
+
+                        if col1.button("Previous Window", use_container_width=True, disabled=prev_disabled):
+                            st.session_state.current_window_start = max(0.0,
+                                                                        st.session_state.current_window_start - 2.0)
                             st.rerun()
 
-    st.divider()
-    with st.expander("Analysis & Staging Tuning"):
-        st.session_state.w_rms = st.slider("RMS Weight", 0.0, 1.0, 0.4, 0.05);
-        st.session_state.w_freq = st.slider("Frequency Weight", 0.0, 1.0, 0.4, 0.05);
-        st.session_state.w_jerk = st.slider("Smoothness Weight", 0.0, 1.0, 0.2, 0.05)
-        st.session_state.stage1_idx = st.slider("Stage 1/2 Boundary", 0.0, 1.0, 0.3);
-        st.session_state.stage2_idx = st.slider("Stage 2/3 Boundary", 0.0, 1.0, 0.5);
-        st.session_state.stage3_idx = st.slider("Stage 3/4 Boundary", 0.0, 1.0, 0.7)
+                        if col2.button("Next Window", use_container_width=True, disabled=next_disabled):
+                            st.session_state.current_window_start = min(total_duration - 2.0,
+                                                                        st.session_state.current_window_start + 2.0)
+                            st.rerun()
+
+                    st.divider()
+                    st.subheader("Generate Report")
+                    if st.session_state.current_window_analysis:
+                        window_str = f"{start_time:.1f}s - {end_time:.1f}s"
+                        if st.button(f"View Report for {window_str}", use_container_width=True, type="primary"):
+                            st.session_state.report_data = {
+                                "analysis": st.session_state.current_window_analysis,
+                                "details": st.session_state.recordings_list[st.session_state.selected_recording_id],
+                                "window_str": window_str
+                            }
+                            st.session_state.viewing_report = True
+                            st.rerun()
+                    else:
+                        st.info("No data in this window to generate a report.")
+
+                    st.divider()
+                    st.subheader("Session Control")
+                    if st.button("Stop Playback (Back to List)", use_container_width=True):
+                        keys_to_reset = ['selected_recording_id', 'full_playback_df', 'current_window_analysis']
+                        for key in keys_to_reset: st.session_state[key] = None
+                        st.rerun()
+                    with st.expander("⚠️ Delete this recording"):
+                        st.warning("This action is permanent and cannot be undone.")
+                        if st.button("Confirm Deletion", use_container_width=True, type="primary"):
+                            if delete_recording_from_firebase(st.session_state.selected_recording_id, FIREBASE_URL,
+                                                              DB_SECRET):
+                                get_recordings_list.clear();
+                                keys_to_reset = ['selected_recording_id', 'full_playback_df', 'current_window_analysis']
+                                for key in keys_to_reset: st.session_state[key] = None
+                                st.rerun()
+
+        st.divider()
+        with st.expander("Analysis & Staging Tuning"):
+            st.session_state.w_rms = st.slider("RMS Weight", 0.0, 1.0, 0.4, 0.05);
+            st.session_state.w_freq = st.slider("Frequency Weight", 0.0, 1.0, 0.4, 0.05);
+            st.session_state.w_jerk = st.slider("Smoothness Weight", 0.0, 1.0, 0.2, 0.05)
+            st.session_state.stage1_idx = st.slider("Stage 1/2 Boundary", 0.0, 1.0, 0.3);
+            st.session_state.stage2_idx = st.slider("Stage 2/3 Boundary", 0.0, 1.0, 0.5);
+            st.session_state.stage3_idx = st.slider("Stage 3/4 Boundary", 0.0, 1.0, 0.7)
+    else:
+        st.info("Currently viewing a report. Use the 'Back to Dashboard' button to return.")
 
 # --- MAIN APPLICATION LOGIC ---
-if st.session_state.mode == 'Live':
-    st.session_state.current_window_analysis = None
-    dataset_id, raw_data, diagnostics = get_live_data_from_firebase(URL=FIREBASE_URL, KEY=DB_SECRET)
-    st.session_state.last_latency, st.session_state.last_data_rate = diagnostics['latency'], diagnostics['data_rate']
+if st.session_state.get('viewing_report', False):
+    placeholder.empty()
+    display_report_page()
+else:
+    if st.session_state.mode == 'Live':
+        st.session_state.current_window_analysis = None
+        dataset_id, raw_data, diagnostics = get_live_data_from_firebase(URL=FIREBASE_URL, KEY=DB_SECRET)
+        st.session_state.last_latency, st.session_state.last_data_rate = diagnostics['latency'], diagnostics[
+            'data_rate']
 
-    if dataset_id is not None:
-        if dataset_id != st.session_state.last_seen_id:
-            st.session_state.device_status = "🟢 Online"
-            st.session_state.last_seen_id = dataset_id
-            st.session_state.last_id_time = time.time()
-        elif time.time() - st.session_state.last_id_time > (st.session_state.get('live_refresh_interval', 5) * 4):
-            st.session_state.device_status = "🔴 Offline"
+        if dataset_id is not None:
+            if dataset_id != st.session_state.last_seen_id:
+                st.session_state.device_status = "🟢 Online"
+                st.session_state.last_seen_id = dataset_id
+                st.session_state.last_id_time = time.time()
+            elif time.time() - st.session_state.last_id_time > (st.session_state.get('live_refresh_interval', 5) * 4):
+                st.session_state.device_status = "🔴 Offline"
+            else:
+                st.session_state.device_status = "🟡 Moderate"
+
+            if st.session_state.is_recording and raw_data:
+                if dataset_id > st.session_state.get('last_recorded_id', -1):
+                    st.session_state.recorded_data_buffer.extend(raw_data)
+                    st.session_state.last_recorded_id = dataset_id
+
+            processed_result = perform_advanced_analysis(raw_data)
+            if processed_result:
+                df, metrics, fft_df, spec_data, corr_matrix = processed_result
+                live_info = {
+                    'status': st.session_state.device_status,
+                    'id_label': 'Dataset ID',
+                    'id_value': dataset_id,
+                    'time_label': 'Last Update',
+                    'timestamp': datetime.now().strftime('%H:%M:%S')
+                }
+                placeholder.empty();
+                display_dashboard(df, metrics, fft_df, spec_data, corr_matrix, display_info=live_info)
+            else:
+                placeholder.warning("Received data is invalid or too small. Waiting for new data...")
         else:
-            st.session_state.device_status = "🟡 Moderate"
+            st.session_state.device_status = "Disconnected"
+            placeholder.error("Could not retrieve live data. Check connection and secrets. Retrying...")
 
-        if st.session_state.is_recording and raw_data:
-            # Check to avoid duplicating data from the same dataset_id
-            if dataset_id > st.session_state.get('last_recorded_id', -1):
-                st.session_state.recorded_data_buffer.extend(raw_data)
-                st.session_state.last_recorded_id = dataset_id
-
-        processed_result = perform_advanced_analysis(raw_data)
-        if processed_result:
-            df, metrics, fft_df, spec_data, corr_matrix = processed_result
-            live_info = {
-                'status': st.session_state.device_status,
-                'id_label': 'Dataset ID',
-                'id_value': dataset_id,
-                'time_label': 'Last Update',
-                'timestamp': datetime.now().strftime('%H:%M:%S')
+    else:  # Playback mode
+        if analysis_result_for_display:
+            df, metrics, fft_df, spec_data, corr_matrix = analysis_result_for_display
+            start_time = st.session_state.current_window_start
+            window_str = f"{start_time:.1f}s - {start_time + 2.0:.1f}s"
+            playback_info = {
+                'status': 'Playback',
+                'id_label': 'Recording ID',
+                'id_value': st.session_state.selected_recording_id,
+                'time_label': 'Recorded On',
+                'timestamp': st.session_state.recordings_list[st.session_state.selected_recording_id]['timestamp']
             }
-            placeholder.empty();
-            display_dashboard(df, metrics, fft_df, spec_data, corr_matrix, display_info=live_info)
+            placeholder.empty()
+            display_dashboard(df, metrics, fft_df, spec_data, corr_matrix, display_info=playback_info,
+                              current_window=window_str)
+        elif st.session_state.selected_recording_id is not None and st.session_state.full_playback_df is not None:
+            placeholder.warning(f"No valid data in the selected window. Please try another window.");
+        elif st.session_state.selected_recording_id is None:
+            placeholder.info("Select a recording from the sidebar to begin playback and analysis.")
         else:
-            placeholder.warning("Received data is invalid or too small. Waiting for new data...")
-    else:
-        st.session_state.device_status = "Disconnected"
-        placeholder.error("Could not retrieve live data. Check connection and secrets. Retrying...")
-
-else:  # Playback mode
-    if analysis_result_for_display:
-        df, metrics, fft_df, spec_data, corr_matrix = analysis_result_for_display
-        start_time = st.session_state.current_window_start
-        window_str = f"{start_time:.1f}s - {start_time + 2.0:.1f}s"
-        playback_info = {
-            'status': 'Playback',
-            'id_label': 'Recording ID',
-            'id_value': st.session_state.selected_recording_id,
-            'time_label': 'Recorded On',
-            'timestamp': st.session_state.recordings_list[st.session_state.selected_recording_id]['timestamp']
-        }
-        placeholder.empty()
-        display_dashboard(df, metrics, fft_df, spec_data, corr_matrix, display_info=playback_info,
-                          current_window=window_str)
-    elif st.session_state.selected_recording_id is not None and st.session_state.full_playback_df is not None:
-        placeholder.warning(f"No valid data in the selected window. Please try another window.");
-    elif st.session_state.selected_recording_id is None:
-        placeholder.info("Select a recording from the sidebar to begin playback and analysis.")
-    else:
-        pass
+            pass
 
     # --- Footer ---
-st.markdown("""
-    <div style='background-color: #0e1117; color: #4f4f4f; text-align: center; padding: 15px; font-size: 14px; margin-top: 50px; width: 100%; border-top: 1px solid #4f4f4f;'>
-        <b>Project:</b> Vibration Analyzed Smart Glove to Aid Parkinson's Patient Hand Tremor with Postural Stability<br>
-        <b>Team:</b> 22LE1-035 S.A.P.U.Hemachandra | 22LE2-082 I.H.C.Udayanga | <b>Group:</b> B 07-18<br>
-        <b>Supervisor:</b> Mr. Nuwan Attanayake
-    </div>
-""", unsafe_allow_html=True)
+    st.markdown("""
+        <div style='background-color: #0e1117; color: #4f4f4f; text-align: center; padding: 15px; font-size: 14px; margin-top: 50px; width: 100%; border-top: 1px solid #4f4f4f;'>
+            <b>Project:</b> Vibration Analyzed Smart Glove to Aid Parkinson's Patient Hand Tremor with Postural Stability<br>
+            <b>Team:</b> 22LE1-035 S.A.P.U.Hemachandra | 22LE2-082 I.H.C.Udayanga | <b>Group:</b> B 07-18<br>
+            <b>Supervisor:</b> Mr. Nuwan Attanayake
+        </div>
+    """, unsafe_allow_html=True)
 
-
-# --- Auto-Refresh Logic ---
-if st.session_state.is_running and st.session_state.mode == 'Live':
-    time.sleep(st.session_state.get('live_refresh_interval', 5))
-    st.rerun()
+    # --- Auto-Refresh Logic ---
+    if st.session_state.is_running and st.session_state.mode == 'Live':
+        time.sleep(st.session_state.get('live_refresh_interval', 5))
+        st.rerun()
