@@ -258,105 +258,174 @@ def format_stage_with_color(stage_string):
         if stage in stage_string: return f"<span style='color: {color};'>{stage_string}</span>"
     return f"<span style='color: #333;'>{stage_string}</span>"
 
+
+
+
+import numpy as np
+import pandas as pd
+from datetime import datetime
+
 def generate_html_report(window_analysis, patient_details, window_str):
+    """
+    Generates a highly reliable, visually rich HTML report using native CSS and SVG for graphing.
+    This eliminates the need for kaleido and is guaranteed to work on any platform.
+    """
     df, metrics, fft_df, _, _ = window_analysis
 
-    # --- 1. Main Prediction ---
-    # Determine the predicted level and an associated color for styling
+    # --- Helper Function: Create CSS/SVG Gauge Chart ---
+    def create_gauge_chart(value, stage):
+        angle = max(0, min(180, value * 180)) # Map 0-1 value to 0-180 degrees
+        stage_color = {
+            "Mild": "#28a745", "Moderate": "#ffc107",
+            "Severe": "#fd7e14", "Critical": "#dc3545"
+        }.get(stage.split(" ")[-1], "#6c757d")
+
+        return f"""
+        <div class="gauge-container">
+            <div class="gauge-background"></div>
+            <div class="gauge-needle" style="transform: rotate({angle}deg);"></div>
+            <div class="gauge-center-orb"></div>
+            <div class="gauge-text">
+                <div class="gauge-value">{value:.3f}</div>
+                <div class="gauge-label" style="color: {stage_color};">{stage}</div>
+            </div>
+            <div class="gauge-scale-min">0.0</div>
+            <div class="gauge-scale-max">1.0</div>
+        </div>
+        """
+
+    # --- Helper Function: Create SVG Line Chart ---
+    def create_svg_line_chart(df):
+        # Downsample data for performance if there are too many points
+        if len(df) > 500:
+            step = len(df) // 500
+            df_sampled = df.iloc[::step, :]
+        else:
+            df_sampled = df
+
+        # SVG Dimensions and Padding
+        w, h, pad = 600, 250, 40
+        max_time = df_sampled['time_s'].max()
+        max_accel = max(df_sampled['total_mag'].max(), df_sampled['total_mag_stable'].max()) * 1.1
+
+        # Create point strings for SVG polylines
+        points1, points2 = "", ""
+        for _, row in df_sampled.iterrows():
+            x = pad + (row['time_s'] / max_time) * (w - 2 * pad)
+            y1 = h - pad - (row['total_mag'] / max_accel) * (h - 2 * pad)
+            y2 = h - pad - (row['total_mag_stable'] / max_accel) * (h - 2 * pad)
+            points1 += f"{x:.2f},{y1:.2f} "
+            points2 += f"{x:.2f},{y2:.2f} "
+
+        return f"""
+        <div class="svg-chart-container">
+            <svg viewBox="0 0 {w} {h}" preserveAspectRatio="xMidYMid meet">
+                <!-- Axes -->
+                <line x1="{pad}" y1="{h-pad}" x2="{w-pad}" y2="{h-pad}" stroke="#adb5bd" stroke-width="1"/>
+                <line x1="{pad}" y1="{pad}" x2="{pad}" y2="{h-pad}" stroke="#adb5bd" stroke-width="1"/>
+                <!-- Y-Axis Labels -->
+                <text x="{pad-10}" y="{pad+5}" text-anchor="end" font-size="10" fill="#6c757d">{max_accel:.0f}</text>
+                <text x="{pad-10}" y="{h-pad}" text-anchor="end" font-size="10" fill="#6c757d">0</text>
+                <!-- X-Axis Labels -->
+                <text x="{pad}" y="{h-pad+15}" text-anchor="start" font-size="10" fill="#6c757d">0s</text>
+                <text x="{w-pad}" y="{h-pad+15}" text-anchor="end" font-size="10" fill="#6c757d">{max_time:.1f}s</text>
+                <text x="{w/2}" y="{h-5}" text-anchor="middle" font-size="12" fill="#495057">Time (seconds)</text>
+                <!-- Data Lines -->
+                <polyline points="{points1.strip()}" fill="none" stroke="#ffa726" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+                <polyline points="{points2.strip()}" fill="none" stroke="#42a5f5" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+            </svg>
+            <div class="svg-legend">
+                <span class="legend-item"><span class="legend-color" style="background-color: #ffa726;"></span>Raw Hand Tremor</span>
+                <span class="legend-item"><span class="legend-color" style="background-color: #42a5f5;"></span>Stabilized Movement</span>
+            </div>
+        </div>
+        """
+
+    # --- Helper Function: Create CSS Bar Chart ---
+    def create_css_bar_chart(fft_df):
+        # Filter for relevant frequencies and downsample for visual clarity
+        fft_filt = fft_df[(fft_df['Frequency (Hz)'] >= 0.5) & (fft_df['Frequency (Hz)'] <= 25)]
+        if len(fft_filt) > 40:
+             step = len(fft_filt) // 40
+             fft_filt = fft_filt.iloc[::step,:]
+        max_power = fft_filt['Power'].max()
+        if max_power == 0: max_power = 1 # Avoid division by zero
+
+        bars_html = ""
+        for _, row in fft_filt.iterrows():
+            freq = row['Frequency (Hz)']
+            height = (row['Power'] / max_power) * 100
+            is_pd_band = 3 <= freq <= 7
+            color_class = "bar-pd" if is_pd_band else ""
+            bars_html += f"""
+            <div class="bar-item" title="{freq:.1f} Hz - Power: {row['Power']:.0f}">
+                <div class="bar-value {color_class}" style="height: {height}%;"></div>
+            </div>"""
+        return f'<div class="bar-chart-container">{bars_html}</div><div class="bar-chart-xlabel">Frequency (Hz) →</div>'
+
+
+    # --- Main Report Assembly ---
     stage = metrics['stage']
-    if "Mild" in stage:
-        prediction_color = "#28a745" # Green
-        prediction_advice = "The tremor is minimal and may not significantly interfere with daily activities. Monitor for any changes."
-    elif "Moderate" in stage:
-        prediction_color = "#ffc107" # Yellow/Orange
-        prediction_advice = "The tremor is noticeable and may cause some difficulty with tasks. The stabilizer shows significant effectiveness."
-    elif "Severe" in stage:
-        prediction_color = "#dc3545" # Red
-        prediction_advice = "The tremor is prominent and likely interferes with daily living. Device intervention is highly beneficial."
-    else: # Critical
-        prediction_color = "#8B0000" # Dark Red
-        prediction_advice = "The tremor is very severe. The data indicates a critical level of motor symptoms requiring immediate attention."
-
-    # --- 2. Detailed Observations (Text-based analysis) ---
-    # Observation on Intensity and Effectiveness
-    stabilized_rms = np.sqrt(np.mean(df['total_mag_stable'] ** 2)) if 'total_mag_stable' in df else 0
-    intensity_obs = (f"The raw hand tremor registered a Root Mean Square (RMS) power of <strong>{metrics['rms_tremor']:.0f}</strong>. "
-                     f"The stabilization device successfully reduced this to an RMS of <strong>{stabilized_rms:.0f}</strong>, "
-                     f"resulting in a tremor reduction effectiveness of <strong>{metrics['effectiveness']:.1f}%</strong>.")
-
-    # Observation on Frequency
-    frequency_obs = (f"Frequency analysis identified a dominant tremor peak at <strong>{metrics['peak_freq']:.2f} Hz</strong>. "
-                     f"A significant <strong>{metrics['band_power_3_7_ratio']:.1f}%</strong> of the total movement energy was found "
-                     f"within the 3-7 Hz range, which is a classic biomarker for Parkinsonian tremor.")
-
-    # Observation on Movement Quality
-    quality_obs = (f"The movement's jerkiness, a measure of smoothness, was calculated at <strong>{metrics['rms_jerk']/1000:.1f}k</strong>. "
-                   f"The spectral entropy was <strong>{metrics['spectral_entropy']:.2f}</strong>, indicating a tremor with "
-                   f"{'a highly regular and predictable pattern.' if metrics['spectral_entropy'] < 3.5 else 'some irregularity and randomness.'}")
-
-    # --- 3. Key Metrics Table ---
-    # Create rows for a clean HTML table
-    metric_table_rows = "".join([
-        f"<tr><td>{label}</td><td>{val}</td></tr>" for label, val in [
-            ("Composite Severity Index", f"{metrics['composite_index']:.3f}"),
-            ("Peak Tremor Frequency", f"{metrics['peak_freq']:.2f} Hz"),
-            ("Power in Parkinson's Band (3-7Hz)", f"{metrics['band_power_3_7_ratio']:.1f} %"),
-            ("Overall Tremor Intensity (RMS)", f"{metrics['rms_tremor']:.0f}"),
-            ("Stabilizer Effectiveness", f"{metrics['effectiveness']:.1f} %"),
-            ("Movement Jerkiness (RMS Jerk)", f"{metrics['rms_jerk']/1000:.1f} k"),
-            ("Movement Randomness (Entropy)", f"{metrics['spectral_entropy']:.2f}"),
-            ("Crest Factor", f"{metrics['crest_factor']:.2f}"),
-            ("Signal Magnitude Area", f"{metrics['sma']:.1f}"),
-        ]
-    ])
-
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    # --- 4. Assemble the final HTML string ---
+    # Generate the graphs
+    gauge_html = create_gauge_chart(metrics['composite_index'], stage)
+    line_chart_html = create_svg_line_chart(df)
+    bar_chart_html = create_css_bar_chart(fft_df)
+
+    # Main HTML structure
     html = f"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tremor Analysis Report: {patient_details.get('patient_id', 'N/A')}</title>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movement Report: {patient_details.get('patient_id', 'N/A')}</title>
 <style>
   body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f8f9fa; color: #343a40; }}
-  .container {{ max-width: 800px; margin: 20px auto; padding: 20px; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border-radius: 12px; }}
-  .header {{ text-align: left; border-bottom: 1px solid #dee2e6; padding-bottom: 15px; margin-bottom: 25px; }}
+  .container {{ max-width: 800px; margin: 20px auto; background-color: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border-radius: 12px; }}
+  .header {{ padding: 25px; border-bottom: 1px solid #dee2e6; }}
   .header h1 {{ margin: 0; color: #212529; font-size: 26px; }}
   .header p {{ margin: 5px 0 0; color: #6c757d; font-size: 14px; }}
-  .card {{ background: #fff; border: 1px solid #e9ecef; border-radius: 8px; padding: 20px; margin-bottom: 20px; }}
-  h2 {{ font-size: 20px; color: #0056b3; border-bottom: 2px solid #0056b3; padding-bottom: 8px; margin-top: 0; }}
-  h3 {{ font-size: 16px; color: #495057; margin-top: 1.5em; margin-bottom: 0.5em; }}
-  .prediction-box {{
-    padding: 20px;
-    border-radius: 8px;
-    text-align: center;
-    color: white;
-    background-color: {prediction_color};
-    border: 2px solid rgba(0,0,0,0.2);
-  }}
-  .prediction-box .stage {{ font-size: 28px; font-weight: 700; margin: 0; }}
-  .prediction-box .score {{ font-size: 16px; opacity: 0.9; margin: 4px 0 10px 0; }}
-  .prediction-box .advice {{ font-size: 14px; font-style: italic; opacity: 0.95; max-width: 90%; margin: auto; }}
-
-  table {{ width: 100%; border-collapse: collapse; margin-top: 15px; }}
-  td {{ padding: 12px 15px; text-align: left; border-bottom: 1px solid #dee2e6; }}
-  tr:last-child td {{ border-bottom: none; }}
+  .content {{ padding: 25px; }}
+  .card {{ background: #fff; border: 1px solid #e9ecef; border-radius: 8px; margin-bottom: 25px; overflow: hidden;}}
+  .card-header {{ padding: 15px 20px; background-color: #f8f9fa; border-bottom: 1px solid #e9ecef; }}
+  .card-header h2 {{ font-size: 18px; margin: 0; color: #495057; }}
+  .card-body {{ padding: 20px; }}
+  .grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }}
+  table {{ width: 100%; border-collapse: collapse; }}
+  td {{ padding: 10px; border-bottom: 1px solid #f1f3f5; }}
   td:first-child {{ color: #495057; }}
   td:last-child {{ font-weight: 600; text-align: right; font-family: 'Menlo', 'Consolas', monospace; }}
+  tr:last-child td {{ border-bottom: none; }}
+  .footer {{ text-align: center; font-size: 12px; color: #6c757d; padding: 20px; border-top: 1px solid #dee2e6; }}
 
-  .observation {{
-    font-size: 15px;
-    line-height: 1.6;
-    background-color: #f8f9fa;
-    border-left: 4px solid #ced4da;
-    padding: 10px 15px;
-    margin-top: 10px;
-    border-radius: 0 4px 4px 0;
-  }}
-  .footer {{ text-align: center; font-size: 12px; color: #6c757d; margin-top: 30px; padding-top: 15px; border-top: 1px solid #dee2e6; }}
+  /* Gauge Chart Styles */
+  .gauge-container {{ position: relative; width: 250px; height: 125px; margin: 20px auto; overflow: hidden; }}
+  .gauge-background {{ position: absolute; width: 250px; height: 250px; border-radius: 50%; box-sizing: border-box;
+    border: 30px solid #e9ecef; border-bottom-color: #28a745; border-left-color: #ffc107; border-right-color: #ffc107;
+    border-top-color: #dc3545; transform: rotate(135deg); }}
+  .gauge-needle {{ position: absolute; width: 2px; height: 95px; background: #343a40; left: 124px; top: 30px;
+    transform-origin: 50% 100%; transition: transform 0.5s ease; }}
+  .gauge-center-orb {{ position: absolute; width: 10px; height: 10px; background: #343a40; border-radius: 50%; left: 120px; top: 115px; }}
+  .gauge-text {{ position: absolute; width: 100%; text-align: center; bottom: 0; }}
+  .gauge-value {{ font-size: 24px; font-weight: 700; color: #212529; }}
+  .gauge-label {{ font-size: 14px; font-weight: 500; }}
+  .gauge-scale-min, .gauge-scale-max {{ position: absolute; bottom: 0; font-size: 12px; color: #6c757d; }}
+  .gauge-scale-min {{ left: 10px; }} .gauge-scale-max {{ right: 10px; }}
+
+  /* SVG Line Chart Styles */
+  .svg-chart-container {{ margin: 10px 0; }}
+  .svg-legend {{ display: flex; justify-content: center; gap: 20px; margin-top: 10px; font-size: 12px; }}
+  .legend-item {{ display: flex; align-items: center; }}
+  .legend-color {{ width: 12px; height: 12px; border-radius: 2px; margin-right: 6px; }}
+
+  /* CSS Bar Chart Styles */
+  .bar-chart-container {{ display: flex; align-items: flex-end; height: 150px; border-left: 1px solid #adb5bd; border-bottom: 1px solid #adb5bd; gap: 2px; padding: 0 5px; }}
+  .bar-item {{ flex: 1; display: flex; align-items: flex-end; }}
+  .bar-value {{ width: 100%; background-color: #42a5f5; transition: height 0.3s; }}
+  .bar-value.bar-pd {{ background-color: #ef5350; }}
+  .bar-chart-xlabel {{ font-size: 12px; text-align: center; color: #6c757d; margin-top: 5px; }}
+  .pd-band-highlight {{ background: rgba(239, 83, 80, 0.1); padding: 2px 6px; border-radius: 4px;}}
 </style>
 </head>
 <body>
@@ -365,43 +434,51 @@ def generate_html_report(window_analysis, patient_details, window_str):
         <h1>Movement Analysis Report</h1>
         <p>Patient: {patient_details.get('patient_id', 'N/A')} | Date: {patient_details.get('timestamp', 'N/A')} | Window: {window_str}</p>
     </div>
+    <div class="content">
+        <div class="grid">
+            <div class="card">
+                <div class="card-header"><h2>Severity Index</h2></div>
+                <div class="card-body">{gauge_html}</div>
+            </div>
+            <div class="card">
+                <div class="card-header"><h2>Key Metrics</h2></div>
+                <div class="card-body">
+                    <table>
+                        <tr><td>Tremor Stage</td><td style="color:{{"#28a745" if "Mild" in stage else "#ffc107" if "Moderate" in stage else "#dc3545"}};">{stage}</td></tr>
+                        <tr><td>RMS Power</td><td>{metrics['rms_tremor']:.0f}</td></tr>
+                        <tr><td>Peak Frequency</td><td>{metrics['peak_freq']:.2f} Hz</td></tr>
+                        <tr><td>Effectiveness</td><td>{metrics['effectiveness']:.1f} %</td></tr>
+                        <tr><td>RMS Jerk</td><td>{metrics['rms_jerk']/1000:.1f} k</td></tr>
+                    </table>
+                </div>
+            </div>
+        </div>
 
-    <div class="card">
-      <h2>Tremor Level Predicted</h2>
-      <div class="prediction-box">
-          <p class="stage">{stage}</p>
-          <p class="score">Composite Index: {metrics['composite_index']:.3f}</p>
-          <p class="advice">{prediction_advice}</p>
-      </div>
+        <div class="card">
+            <div class="card-header"><h2>Movement Time-Series</h2></div>
+            <div class="card-body">{line_chart_html}</div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><h2>Frequency Spectrum</h2></div>
+            <div class="card-body">
+                {bar_chart_html}
+                <p style="font-size:12px; text-align:center; margin-top:10px;">The <span class="pd-band-highlight">red bars</span> highlight the 3-7 Hz band, a key indicator for Parkinsonian tremor.</p>
+            </div>
+        </div>
     </div>
-
-    <div class="card">
-        <h2>Detailed Observations</h2>
-        <h3>Tremor Intensity & Device Effectiveness</h3>
-        <p class="observation">{intensity_obs}</p>
-
-        <h3>Frequency Characteristics</h3>
-        <p class="observation">{frequency_obs}</p>
-
-        <h3>Movement Quality & Smoothness</h3>
-        <p class="observation">{quality_obs}</p>
-    </div>
-
-    <div class="card">
-        <h2>All Numerical Data</h2>
-        <table>
-            {metric_table_rows}
-        </table>
-    </div>
-
     <div class="footer">
-      Generated on: {now}. This is an auto-generated report for clinical review and research purposes.
+      Generated on: {now}. This report and its visualizations are for clinical review and research.
     </div>
   </div>
 </body>
 </html>
 """
     return html
+
+
+
+
 # --- MAIN DASHBOARD DISPLAY (Unchanged) ---
 def display_dashboard(df, metrics, fft_df, spec_data, corr_matrix, display_info, current_window=None):
     st.title("Advanced Parkinson's Movement Analyzer")
