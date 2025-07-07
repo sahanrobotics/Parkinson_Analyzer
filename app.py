@@ -299,6 +299,7 @@ def format_stage_with_color(stage_string):
 
 
 
+
 def generate_html_report(window_analysis, patient_details, window_str):
     """
     Generates a complete, visually rich, and data-dense report with a modern, professional design.
