@@ -814,11 +814,12 @@ with st.sidebar:
 
     st.divider()
     with st.expander("Analysis & Staging Tuning"):
-        st.session_state.w_rms = st.slider("RMS Weight", 0.0, 1.0, 0.4, 0.05);
-        st.session_state.w_freq = st.slider("Frequency Weight", 0.0, 1.0, 0.4, 0.05);
-        st.session_state.w_jerk = st.slider("Smoothness Weight", 0.0, 1.0, 0.2, 0.05)
-        st.session_state.stage1_idx = st.slider("Stage 1/2 Boundary", 0.0, 1.0, 0.3);
-        st.session_state.stage2_idx = st.slider("Stage 2/3 Boundary", 0.0, 1.0, 0.5);
+        st.session_state.w_rms = st.slider("RMS Weight", 0.0, 1.0, 0.3, 0.05);
+        st.session_state.w_freq = st.slider("Frequency Weight", 0.0, 1.0, 0.3, 0.05);
+        st.session_state.w_jerk = st.slider("Smoothness Weight", 0.0, 1.0, 0.4, 0.05)
+
+        st.session_state.stage1_idx = st.slider("Stage 1/2 Boundary", 0.0, 1.0, 0.5);
+        st.session_state.stage2_idx = st.slider("Stage 2/3 Boundary", 0.0, 1.0, 0.6);
         st.session_state.stage3_idx = st.slider("Stage 3/4 Boundary", 0.0, 1.0, 0.7)
 
 # --- MAIN APPLICATION LOGIC ---
