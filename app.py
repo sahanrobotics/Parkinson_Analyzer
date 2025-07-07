@@ -190,7 +190,7 @@ def perform_advanced_analysis(data):
             return df, zero_metrics, pd.DataFrame({'Frequency (Hz)': [], 'Power': []}), (f_spec, t_spec, Sxx), zero_corr
 
         df['total_mag'] = np.sqrt(df['ax1'] ** 2 + df['ay1'] ** 2 + df['az1'] ** 2)
-        df['total_mag_stable'] = np.sqrt(df['ax2'] ** 2 + df['ay2'] ** 2 + df['az2'] ** 2)-4500
+        df['total_mag_stable'] = np.sqrt(df['ax2'] ** 2 + df['ay2'] ** 2 + df['az2'] ** 2)-3800
         rms_tremor = np.sqrt(np.mean(df['total_mag'] ** 2))
         df['jerk'] = np.gradient(df['total_mag'], df['time_s'])
         rms_jerk = np.sqrt(np.mean(df['jerk'] ** 2))
